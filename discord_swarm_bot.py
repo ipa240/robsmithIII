@@ -494,7 +494,7 @@ def generate_image(prompt, width=1216, height=832, steps=50, cfg_scale=6.5, nega
             "scheduler": "karras",
             "seed": -1,  # Random seed
             "model": default_model,
-            "loras": "<lora:lora:1.0>"  # Apply lora.safetensors to all generations
+            "loras": "lora"  # Apply lora.safetensors to all generations
         }
 
         # Add upscaling if enabled (smart upscaling based on resolution)
