@@ -1,0 +1,19 @@
+[Unit]
+Description=Discord AI Image Generator Bot
+After=network.target
+
+[Service]
+Type=simple
+User=ian
+WorkingDirectory=/home/ian
+ExecStart=/usr/bin/python3 /home/ian/discord_swarm_bot.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/ian/bot.log
+StandardError=append:/home/ian/bot.log
+
+# Environment variables
+Environment="PATH=/usr/bin:/usr/local/bin"
+
+[Install]
+WantedBy=multi-user.target
