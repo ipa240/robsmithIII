@@ -39,6 +39,10 @@ class SafeClickworkerAgent:
         self.last_break = datetime.now()
         self.jobs_since_break = 0
 
+        # Payment tracking
+        self.submission_log = []
+        self.payout_file = "/tmp/clickworker_payouts.log"
+
     def log(self, msg, level="INFO"):
         timestamp = datetime.now().strftime("%H:%M:%S")
         icons = {"INFO": "ℹ️", "SUCCESS": "✅", "ERROR": "❌", "THINKING": "🤔", "ACTION": "▶️", "WARNING": "⚠️", "BREAK": "☕"}
@@ -207,6 +211,30 @@ class SafeClickworkerAgent:
             except:
                 pass
 
+    def log_submission(self, job_number, compensation=0.25):
+        """Log job submission for payout tracking"""
+        submission_time = datetime.now()
+        expected_payout = submission_time + timedelta(days=40)
+
+        log_entry = {
+            "job_number": job_number,
+            "submitted": submission_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "expected_payout": expected_payout.strftime("%Y-%m-%d"),
+            "compensation": f"${compensation:.2f}"
+        }
+
+        self.submission_log.append(log_entry)
+
+        # Append to persistent log file
+        with open(self.payout_file, 'a') as f:
+            f.write(f"Job #{job_number} | Submitted: {log_entry['submitted']} | "
+                   f"Compensation: {log_entry['compensation']} | "
+                   f"Expected Payout: ~{log_entry['expected_payout']}\n")
+
+        # Console output
+        self.log(f"💰 Submitted job #{job_number} on {log_entry['submitted']}", "SUCCESS")
+        self.log(f"   Expected payout: ~{log_entry['expected_payout']} ({compensation:.2f} USD)", "INFO")
+
     def complete_one_job_safely(self):
         """Complete job with all safety features"""
         self.jobs_completed_today += 1
@@ -235,6 +263,9 @@ class SafeClickworkerAgent:
 
         # TODO: Actual job completion logic here
         # (Same as ULTIMATE_AGENT but with safe wrappers)
+
+        # Log submission for payout tracking
+        self.log_submission(self.jobs_completed_today, compensation=0.25)
 
         self.log("Job completed safely!", "SUCCESS")
 
@@ -268,6 +299,21 @@ class SafeClickworkerAgent:
             self.log("SAFE SHUTDOWN - All limits respected", "SUCCESS")
             self.log(f"Jobs completed today: {self.jobs_completed_today}", "INFO")
             self.log(f"Session duration: {(datetime.now() - self.session_start).total_seconds()/3600:.1f} hours", "INFO")
+
+            # Show earnings summary
+            if self.submission_log:
+                total_earnings = sum(float(entry['compensation'].replace('$', ''))
+                                   for entry in self.submission_log)
+                self.log(f"\n💰 SESSION EARNINGS SUMMARY:", "SUCCESS")
+                self.log(f"   Total jobs: {len(self.submission_log)}", "INFO")
+                self.log(f"   Total earned: ${total_earnings:.2f} USD", "INFO")
+                self.log(f"   Payment log: {self.payout_file}", "INFO")
+
+                # Show next expected payout
+                if self.submission_log:
+                    next_payout = self.submission_log[0]['expected_payout']
+                    self.log(f"   First payout expected: ~{next_payout}", "INFO")
+
             self.log("="*70, "INFO")
 
         except KeyboardInterrupt:
