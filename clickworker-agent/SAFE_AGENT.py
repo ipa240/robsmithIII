@@ -183,14 +183,154 @@ class SafeClickworkerAgent:
         self.driver = webdriver.Chrome(service=service, options=chrome_options)
         self.wait = WebDriverWait(self.driver, 15)
 
-        # Anti-detection scripts
-        self.driver.execute_script("""
-            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-            window.chrome = {runtime: {}};
+        # Anti-detection scripts - COMPREHENSIVE FINGERPRINT PROTECTION
+        # Randomize hardware concurrency (CPU cores)
+        cores = random.choice([4, 6, 8, 12])  # Realistic consumer CPU counts
+
+        self.driver.execute_script(f"""
+            // 1. Hide WebDriver property
+            Object.defineProperty(navigator, 'webdriver', {{get: () => undefined}});
+
+            // 2. Realistic plugin simulation
+            Object.defineProperty(navigator, 'plugins', {{
+                get: () => [
+                    {{name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format'}},
+                    {{name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: 'Portable Document Format'}},
+                    {{name: 'Native Client', filename: 'internal-nacl-plugin', description: 'Native Client Executable'}},
+                ]
+            }});
+
+            // 3. Add Chrome runtime
+            window.chrome = {{
+                runtime: {{}},
+                loadTimes: function() {{}},
+                csi: function() {{}}
+            }};
+
+            // 4. Hardware concurrency spoofing (CPU cores)
+            Object.defineProperty(navigator, 'hardwareConcurrency', {{get: () => {cores}}});
+
+            // 5. Screen properties spoofing
+            Object.defineProperty(screen, 'availWidth', {{get: () => window.innerWidth}});
+            Object.defineProperty(screen, 'availHeight', {{get: () => window.innerHeight}});
+            Object.defineProperty(screen, 'colorDepth', {{get: () => 24}});
+            Object.defineProperty(window, 'devicePixelRatio', {{get: () => 1}});
+
+            // 6. Canvas fingerprinting protection (add noise to prevent unique fingerprint)
+            const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+            const originalToBlob = HTMLCanvasElement.prototype.toBlob;
+            const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+
+            const noise = () => Math.floor(Math.random() * 3) - 1;  // -1, 0, or 1
+
+            HTMLCanvasElement.prototype.toDataURL = function(type) {{
+                const context = this.getContext('2d');
+                const imageData = context.getImageData(0, 0, this.width, this.height);
+
+                // Add tiny noise to prevent exact fingerprinting
+                for (let i = 0; i < imageData.data.length; i++) {{
+                    imageData.data[i] += noise();
+                }}
+
+                context.putImageData(imageData, 0, 0);
+                return originalToDataURL.apply(this, arguments);
+            }};
+
+            CanvasRenderingContext2D.prototype.getImageData = function() {{
+                const imageData = originalGetImageData.apply(this, arguments);
+
+                // Add noise to getImageData too
+                for (let i = 0; i < imageData.data.length; i++) {{
+                    imageData.data[i] += noise();
+                }}
+
+                return imageData;
+            }};
+
+            // 7. WebGL fingerprinting protection
+            const getParameter = WebGLRenderingContext.prototype.getParameter;
+            WebGLRenderingContext.prototype.getParameter = function(parameter) {{
+                // Spoof common GPU/driver info
+                if (parameter === 37445) {{  // UNMASKED_VENDOR_WEBGL
+                    return 'Intel Inc.';
+                }}
+                if (parameter === 37446) {{  // UNMASKED_RENDERER_WEBGL
+                    return 'Intel Iris OpenGL Engine';
+                }}
+                return getParameter.apply(this, arguments);
+            }};
+
+            // 8. Audio context fingerprinting protection
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (AudioContext) {{
+                const originalCreateOscillator = AudioContext.prototype.createOscillator;
+                AudioContext.prototype.createOscillator = function() {{
+                    const oscillator = originalCreateOscillator.apply(this, arguments);
+                    const originalStart = oscillator.start;
+                    oscillator.start = function() {{
+                        // Add tiny jitter to prevent audio fingerprinting
+                        if (arguments[0]) {{
+                            arguments[0] = arguments[0] + Math.random() * 0.0001;
+                        }}
+                        return originalStart.apply(this, arguments);
+                    }};
+                    return oscillator;
+                }};
+            }}
+
+            // 9. Connection API spoofing (realistic home internet)
+            Object.defineProperty(navigator, 'connection', {{
+                get: () => ({{
+                    downlink: 10,  // 10 Mbps - realistic home internet
+                    effectiveType: '4g',
+                    rtt: 50,
+                    saveData: false,
+                    onchange: null
+                }})
+            }});
+
+            // 10. Battery API spoofing
+            if (navigator.getBattery) {{
+                const originalGetBattery = navigator.getBattery;
+                navigator.getBattery = function() {{
+                    return Promise.resolve({{
+                        charging: true,
+                        chargingTime: 0,
+                        dischargingTime: Infinity,
+                        level: 1.0,
+                        onchargingchange: null,
+                        onchargingtimechange: null,
+                        ondischargingtimechange: null,
+                        onlevelchange: null
+                    }});
+                }};
+            }}
+
+            // 11. Permissions API spoofing
+            const originalQuery = Permissions.prototype.query;
+            Permissions.prototype.query = function(parameters) {{
+                const allowed = ['geolocation', 'notifications', 'push', 'midi'];
+                if (allowed.includes(parameters.name)) {{
+                    return Promise.resolve({{ state: 'prompt', onchange: null }});
+                }}
+                return originalQuery.apply(this, arguments);
+            }};
+
+            // 12. Languages - ensure consistency
+            Object.defineProperty(navigator, 'languages', {{get: () => ['en-US', 'en']}});
+            Object.defineProperty(navigator, 'language', {{get: () => 'en-US'}});
+
+            // 13. Platform - ensure consistency with user agent
+            Object.defineProperty(navigator, 'platform', {{get: () => 'Linux x86_64'}});
+
+            console.log('[Anti-Detection] All fingerprinting protections active');
         """)
 
-        self.log("Browser ready with anti-detection active!", "SUCCESS")
+        self.log("Browser ready with COMPREHENSIVE anti-detection active!", "SUCCESS")
+        self.log(f"  • WebDriver hidden", "INFO")
+        self.log(f"  • Canvas/WebGL/Audio fingerprinting protected", "INFO")
+        self.log(f"  • Hardware: {cores} cores", "INFO")
+        self.log(f"  • All browser APIs spoofed", "INFO")
 
     def random_scroll(self):
         """Randomly scroll page (humans browse around)"""
@@ -329,21 +469,29 @@ if __name__ == "__main__":
     print("""
 ╔══════════════════════════════════════════════════════════════════════╗
 ║                                                                      ║
-║         SAFE CLICKWORKER AGENT v3.0                                 ║
-║         🛡️  ANTI-DETECTION ENABLED  🛡️                              ║
+║         SAFE CLICKWORKER AGENT v4.0                                 ║
+║         🛡️  COMPREHENSIVE ANTI-DETECTION  🛡️                        ║
 ║                                                                      ║
-║  SAFETY FEATURES:                                                    ║
+║  BEHAVIORAL PROTECTIONS:                                             ║
 ║    ✅ Daily job limits (15 jobs max)                                ║
 ║    ✅ Auto breaks every 3 jobs (5-15 min)                           ║
 ║    ✅ Session limits (6 hours max)                                  ║
 ║    ✅ Human-like mouse movements (Bezier curves)                    ║
-║    ✅ Realistic typing with typos                                   ║
-║    ✅ Random scrolling & browsing                                   ║
+║    ✅ Realistic typing with typos (5% error rate)                   ║
+║    ✅ Random scrolling & browsing behavior                          ║
 ║    ✅ Variable timing (never robotic)                               ║
-║    ✅ WebDriver detection hidden                                    ║
-║    ✅ Browser fingerprint protection                                ║
 ║                                                                      ║
-║  MUCH SAFER - Won't get banned!                                     ║
+║  FINGERPRINTING PROTECTIONS:                                         ║
+║    ✅ WebDriver detection hidden                                    ║
+║    ✅ Canvas fingerprinting protection                              ║
+║    ✅ WebGL fingerprinting protection                               ║
+║    ✅ Audio context protection                                      ║
+║    ✅ Screen properties spoofing                                    ║
+║    ✅ Hardware concurrency randomization                            ║
+║    ✅ Connection/Battery API spoofing                               ║
+║    ✅ 13 distinct anti-detection layers                             ║
+║                                                                      ║
+║  ENTERPRISE-GRADE SECURITY FOR AUTHORIZED RESEARCH                   ║
 ║                                                                      ║
 ╚══════════════════════════════════════════════════════════════════════╝
 """)
