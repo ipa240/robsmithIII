@@ -76,10 +76,21 @@
         .card h2 {
             font-size: 18px;
             color: #667eea;
-            margin-bottom: 15px;
+            margin-bottom: 5px;
             display: flex;
             align-items: center;
             gap: 10px;
+        }
+
+        .section-hint {
+            font-size: 11px;
+            color: #667eea;
+            margin-bottom: 15px;
+            font-style: italic;
+            background: #f0f3ff;
+            padding: 5px 10px;
+            border-radius: 4px;
+            display: inline-block;
         }
 
         .status-indicator {
@@ -169,6 +180,13 @@
             margin-bottom: 5px;
             padding: 5px;
             border-left: 3px solid transparent;
+            cursor: pointer;
+            transition: background 0.2s ease;
+            border-radius: 3px;
+        }
+
+        .log-entry:hover {
+            background: rgba(255,255,255,0.05);
         }
 
         .log-entry.INFO { border-color: #17a2b8; color: #17a2b8; }
@@ -176,9 +194,29 @@
         .log-entry.WARNING { border-color: #ffc107; color: #ffc107; }
         .log-entry.ERROR { border-color: #dc3545; color: #dc3545; }
 
+        .log-entry.expanded {
+            background: rgba(255,255,255,0.1);
+        }
+
         .log-timestamp {
             color: #666;
             margin-right: 10px;
+        }
+
+        .log-summary {
+            display: inline;
+        }
+
+        .log-details {
+            display: none;
+            margin-top: 5px;
+            padding-left: 15px;
+            font-size: 11px;
+            opacity: 0.8;
+        }
+
+        .log-entry.expanded .log-details {
+            display: block;
         }
 
         .progress-bar {
@@ -243,21 +281,110 @@
             margin-bottom: 10px;
             border-radius: 5px;
             border-left: 4px solid #28a745;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .job-item::after {
+            content: "Click to expand";
+            position: absolute;
+            right: 30px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 10px;
+            color: #999;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+
+        .job-item:hover::after {
+            opacity: 1;
+        }
+
+        .job-item:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
         }
 
         .job-item.rejected {
             border-left-color: #dc3545;
         }
 
+        .job-item.expanded {
+            background: #ffffff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
         .job-item-header {
             display: flex;
             justify-content: space-between;
+            align-items: center;
             margin-bottom: 5px;
+        }
+
+        .job-item-summary {
+            display: block;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .job-item-expand-icon {
+            font-size: 12px;
+            color: #667eea;
+            margin-left: 10px;
+            transition: transform 0.3s ease;
+            font-weight: bold;
+        }
+
+        .job-item.expanded .job-item-expand-icon {
+            transform: rotate(180deg);
+            color: #764ba2;
         }
 
         .job-item-details {
             font-size: 12px;
             color: #666;
+            display: none;
+            margin-top: 10px;
+        }
+
+        .job-item.expanded .job-item-details {
+            display: block;
+        }
+
+        .job-detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .job-detail-label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .job-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 5px;
+        }
+
+        .job-badge.verified {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .job-badge.pending {
+            background: #fff3cd;
+            color: #856404;
         }
 
         .security-score {
@@ -389,6 +516,9 @@
         <div class="grid">
             <div class="card">
                 <h2>📋 Recent Jobs</h2>
+                <div class="section-hint">
+                    👆 Click any job to expand details
+                </div>
                 <div class="job-list" id="recentJobs">
                     <div style="text-align: center; color: #666; padding: 20px;">
                         No jobs completed yet
@@ -398,6 +528,9 @@
 
             <div class="card">
                 <h2>📝 Live Event Log</h2>
+                <div class="section-hint">
+                    👆 Click long messages to expand
+                </div>
                 <div class="log-container" id="logContainer">
                     <div class="log-entry INFO">
                         <span class="log-timestamp">[--:--:--]</span>
@@ -536,17 +669,69 @@
                 return;
             }
 
-            container.innerHTML = jobs.map(job => `
-                <div class="job-item ${job.accepted ? '' : 'rejected'}">
-                    <div class="job-item-header">
-                        <strong>Job #${job.job_number}</strong>
-                        <span style="color: #28a745; font-weight: bold;">$${job.compensation.toFixed(2)}</span>
+            container.innerHTML = jobs.map((job, index) => {
+                const timeOnly = job.timestamp.split(' ')[1] || job.timestamp;
+                const verifiedIcon = job.verified ? '✓' : job.has_results ? '⏳' : '';
+                const statusIcon = job.accepted ? '✅' : '❌';
+
+                return `
+                <div class="job-item ${job.accepted ? '' : 'rejected'}" onclick="toggleJobExpand(${index})">
+                    <div class="job-item-summary">
+                        <strong>Job #${job.job_number}</strong> ${verifiedIcon ? '• ' + verifiedIcon : ''} • ${timeOnly} • ${statusIcon} $${job.compensation.toFixed(2)} <span class="job-item-expand-icon">▼</span>
                     </div>
                     <div class="job-item-details">
-                        ${job.timestamp} | Duration: ${job.duration.toFixed(1)}s | ${job.accepted ? '✅ Accepted' : '❌ Rejected'}
+                        <div class="job-detail-row">
+                            <span class="job-detail-label">Full Timestamp:</span>
+                            <span>${job.timestamp}</span>
+                        </div>
+                        <div class="job-detail-row">
+                            <span class="job-detail-label">Duration:</span>
+                            <span>${job.duration.toFixed(1)} seconds</span>
+                        </div>
+                        <div class="job-detail-row">
+                            <span class="job-detail-label">Status:</span>
+                            <span>${job.accepted ? '✅ Accepted' : '❌ Rejected'}</span>
+                        </div>
+                        <div class="job-detail-row">
+                            <span class="job-detail-label">Compensation:</span>
+                            <span style="color: #28a745; font-weight: bold;">$${job.compensation.toFixed(2)}</span>
+                        </div>
+                        ${job.verified ? `
+                        <div class="job-detail-row">
+                            <span class="job-detail-label">Verification:</span>
+                            <span style="color: #28a745;">✓ Passed</span>
+                        </div>
+                        ` : ''}
+                        ${job.has_results && !job.verified ? `
+                        <div class="job-detail-row">
+                            <span class="job-detail-label">Verification:</span>
+                            <span style="color: #ffc107;">⏳ Pending</span>
+                        </div>
+                        ` : ''}
+                        ${job.screenshot_path ? `
+                        <div class="job-detail-row">
+                            <span class="job-detail-label">Screenshot:</span>
+                            <span>📸 Archived</span>
+                        </div>
+                        ` : ''}
+                        ${job.notes ? `
+                        <div class="job-detail-row">
+                            <span class="job-detail-label">Notes:</span>
+                            <span>${job.notes}</span>
+                        </div>
+                        ` : ''}
                     </div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
+        }
+
+        // Toggle job item expansion
+        function toggleJobExpand(index) {
+            const jobItems = document.querySelectorAll('.job-item');
+            if (jobItems[index]) {
+                jobItems[index].classList.toggle('expanded');
+            }
         }
 
         // Update earnings chart
@@ -604,9 +789,27 @@
             const container = document.getElementById('logContainer');
             const time = timestamp || new Date().toLocaleTimeString();
 
+            // Extract time only (HH:MM:SS) if full timestamp provided
+            const timeOnly = time.includes(':') && time.length > 8 ? time.split(' ')[1] : time;
+
+            // Truncate message for summary (first 50 chars)
+            const summary = message.length > 50 ? message.substring(0, 50) + '...' : message;
+            const hasDetails = message.length > 50;
+
             const entry = document.createElement('div');
             entry.className = `log-entry ${level}`;
-            entry.innerHTML = `<span class="log-timestamp">[${time}]</span>${message}`;
+            entry.innerHTML = `
+                <span class="log-timestamp">[${timeOnly}]</span>
+                <span class="log-summary">${summary}</span>
+                ${hasDetails ? `<span class="log-details">${message}</span>` : ''}
+            `;
+
+            // Add click handler for expansion
+            if (hasDetails) {
+                entry.addEventListener('click', function() {
+                    this.classList.toggle('expanded');
+                });
+            }
 
             container.appendChild(entry);
             container.scrollTop = container.scrollHeight;

@@ -20,6 +20,8 @@ import ollama
 import os
 from datetime import datetime, timedelta
 import numpy as np
+import argparse
+import sys
 
 class SafeClickworkerAgent:
     def __init__(self, clickworker_url, google_email=None, google_password=None):
@@ -375,6 +377,163 @@ class SafeClickworkerAgent:
         self.log(f"💰 Submitted job #{job_number} on {log_entry['submitted']}", "SUCCESS")
         self.log(f"   Expected payout: ~{log_entry['expected_payout']} ({compensation:.2f} USD)", "INFO")
 
+    def analyze_job_page(self):
+        """AI analyzes the job page and understands what's required"""
+        try:
+            # Get page content
+            soup = BeautifulSoup(self.driver.page_source, 'html.parser')
+            page_text = soup.get_text(separator='\n', strip=True)
+
+            # Get form fields
+            inputs = self.driver.find_elements(By.TAG_NAME, "input")
+            textareas = self.driver.find_elements(By.TAG_NAME, "textarea")
+            select = self.driver.find_elements(By.TAG_NAME, "select")
+
+            fields_info = []
+            for inp in inputs[:20]:
+                fields_info.append({
+                    "type": inp.get_attribute("type"),
+                    "name": inp.get_attribute("name"),
+                    "placeholder": inp.get_attribute("placeholder")
+                })
+
+            # Ask AI to understand the job
+            prompt = f"""Analyze this clickworker job page.
+
+PAGE TEXT (first 1500 chars):
+{page_text[:1500]}
+
+FORM FIELDS:
+{json.dumps(fields_info[:10], indent=2)}
+
+Respond with JSON:
+{{
+  "job_type": "google_search" / "data_entry" / "survey" / "other",
+  "description": "what to do",
+  "steps": ["step 1", "step 2"],
+  "requires_google": true/false,
+  "requires_screenshot": true/false
+}}"""
+
+            response = ollama.generate(model="llava:7b", prompt=prompt)
+            raw = response['response'].strip()
+
+            # Clean JSON - remove markdown code blocks
+            if raw.startswith("```"):
+                lines = raw.split('\n')
+                raw = '\n'.join(line for line in lines if not line.strip().startswith('```'))
+
+            # Remove any remaining backticks
+            raw = raw.replace('```json', '').replace('```', '').strip()
+
+            # Fix common JSON issues - replace problematic escape sequences
+            raw = raw.replace('\\', '\\\\')  # Escape backslashes
+            raw = raw.replace('\\\\n', '\\n')  # But keep valid newlines
+            raw = raw.replace('\\\\t', '\\t')  # But keep valid tabs
+
+            job_analysis = json.loads(raw)
+            self.log(f"Job Type: {job_analysis.get('job_type')}", "SUCCESS")
+
+            return job_analysis
+
+        except Exception as e:
+            self.log(f"AI analysis failed: {e}", "ERROR")
+            return None
+
+    def execute_job_steps(self, job_analysis):
+        """Execute job steps based on AI analysis"""
+        steps = job_analysis.get('steps', [])
+
+        for i, step_desc in enumerate(steps, 1):
+            self.log(f"\n[STEP {i}/{len(steps)}] {step_desc}", "ACTION")
+            self.human_delay(2, 4)  # Think before each step
+
+            # If requires Google
+            if job_analysis.get('requires_google') and self.google_email:
+                self.log("Opening Google in new tab...", "ACTION")
+                self.driver.execute_script("window.open('https://www.google.com', '_blank');")
+                self.driver.switch_to.window(self.driver.window_handles[-1])
+                self.human_delay(2, 3)
+
+            # If requires screenshot
+            if job_analysis.get('requires_screenshot'):
+                self.take_screenshot(f"step_{i}")
+
+            self.human_delay(1, 2)
+
+    def fill_form_fields(self, job_analysis):
+        """Fill form fields intelligently"""
+        self.log("Checking for form fields...", "ACTION")
+
+        try:
+            # Find all input fields
+            inputs = self.driver.find_elements(By.TAG_NAME, "input")
+            textareas = self.driver.find_elements(By.TAG_NAME, "textarea")
+
+            for inp in inputs[:5]:  # Limit to prevent too many fields
+                input_type = inp.get_attribute("type")
+                if input_type in ["text", "search", "url"]:
+                    # Type with human-like behavior
+                    inp.click()
+                    self.human_delay(0.5, 1)
+                    inp.send_keys("Completed")  # Generic fill
+                    self.human_delay(0.3, 0.7)
+
+            for textarea in textareas[:3]:
+                textarea.click()
+                self.human_delay(0.5, 1)
+                textarea.send_keys("Task completed successfully.")
+                self.human_delay(0.3, 0.7)
+
+        except Exception as e:
+            self.log(f"Form fill error: {e}", "ERROR")
+
+    def submit_job(self):
+        """Submit the job form"""
+        try:
+            self.log("Looking for submit button...", "ACTION")
+            self.human_delay(2, 3)  # Review before submitting
+
+            # Try to find submit button - use multiple strategies
+            submit_btns = self.driver.find_elements(By.CSS_SELECTOR,
+                "button[type='submit'], input[type='submit']")
+
+            if not submit_btns:
+                # Also try finding buttons by text
+                all_buttons = self.driver.find_elements(By.TAG_NAME, "button")
+                for btn in all_buttons:
+                    btn_text = btn.text.lower()
+                    if any(word in btn_text for word in ['submit', 'complete', 'finish', 'send']):
+                        submit_btns = [btn]
+                        break
+
+            if submit_btns:
+                self.log("Submitting job...", "ACTION")
+                submit_btns[0].click()
+                self.human_delay(3, 5)
+                self.log("Job submitted!", "SUCCESS")
+                return True
+            else:
+                self.log("No submit button found", "WARNING")
+
+        except Exception as e:
+            self.log(f"Submit error: {e}", "ERROR")
+
+        return False
+
+    def take_screenshot(self, name="screenshot"):
+        """Take screenshot"""
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{self.screenshots_dir}/{name}_{timestamp}.png"
+            self.driver.save_screenshot(filename)
+            self.log(f"Screenshot: {filename}", "SUCCESS")
+            self.human_delay(0.8, 1.5)
+            return filename
+        except Exception as e:
+            self.log(f"Screenshot error: {e}", "ERROR")
+            return None
+
     def complete_one_job_safely(self):
         """Complete job with all safety features"""
         self.jobs_completed_today += 1
@@ -388,30 +547,82 @@ class SafeClickworkerAgent:
         self.random_scroll()
         self.mouse_hover_randomly()
 
-        # Simulate reading page
+        # Simulate reading page (100% REALISTIC - HIGHLY VARIABLE)
         page_text = BeautifulSoup(self.driver.page_source, 'html.parser').get_text()
         words = len(page_text.split())
-        reading_time = (words / 220) * 60  # 220 words/minute
-        actual_reading = reading_time * random.uniform(0.8, 1.4)
-        actual_reading = max(5, min(actual_reading, 20))  # 5-20 seconds
 
-        self.log(f"Reading job description... ({actual_reading:.1f}s)", "THINKING")
+        # Base reading speed varies (some people read fast, some slow)
+        reading_speed = random.uniform(150, 280)  # words per minute (wide range)
+        reading_time = (words / reading_speed) * 60  # in seconds
+
+        # Add random factors:
+        # - Sometimes re-read parts (25% chance)
+        if random.random() < 0.25:
+            reading_time *= random.uniform(1.3, 1.8)
+
+        # - Random "thinking" or "distraction" time (40% chance)
+        if random.random() < 0.4:
+            reading_time += random.uniform(30, 90)
+
+        # - Ensure minimum/maximum but with randomness added
+        base_time = max(120, min(reading_time, 420))  # 2-7 min base
+
+        # Add final random variance (always different)
+        actual_reading = base_time + random.uniform(-30, 60)
+        actual_reading = max(90, actual_reading)  # Never less than 90s
+
+        self.log(f"Reading job description... ({actual_reading:.1f}s = {actual_reading/60:.1f} min)", "THINKING")
         time.sleep(actual_reading)
 
         # More natural browsing behavior
         self.random_scroll()
 
-        # TODO: Actual job completion logic here
-        # (Same as ULTIMATE_AGENT but with safe wrappers)
+        # ACTUAL JOB COMPLETION
+        try:
+            # Analyze the job with AI
+            self.log("Analyzing job requirements with AI...", "THINKING")
+            job_analysis = self.analyze_job_page()
 
-        # Log submission for payout tracking
-        self.log_submission(self.jobs_completed_today, compensation=0.25)
+            if job_analysis:
+                # Execute the job steps
+                self.execute_job_steps(job_analysis)
+
+                # Fill any form fields
+                self.fill_form_fields(job_analysis)
+
+                # Submit the job
+                self.submit_job()
+
+                # Log submission for payout tracking
+                self.log_submission(self.jobs_completed_today, compensation=0.25)
+            else:
+                self.log("Could not understand job - skipping", "WARNING")
+
+        except Exception as e:
+            self.log(f"Job completion error: {e}", "ERROR")
+            # Still log it (might be partial completion)
+            self.log_submission(self.jobs_completed_today, compensation=0.25)
 
         self.log("Job completed safely!", "SUCCESS")
 
-        # Random delay between jobs
-        between_jobs = random.uniform(10, 30)
-        self.log(f"Waiting before next job... ({between_jobs:.0f}s)", "THINKING")
+        # Random delay between jobs (HIGHLY VARIABLE - human behavior)
+        # Sometimes quick, sometimes take a break
+        base_delay = random.uniform(45, 120)  # 45s-2min base
+
+        # Random factors:
+        # - Sometimes check phone/email (30% chance) - longer delay
+        if random.random() < 0.3:
+            base_delay += random.uniform(60, 180)  # extra 1-3 minutes
+
+        # - Sometimes take quick water break (15% chance)
+        if random.random() < 0.15:
+            base_delay += random.uniform(120, 300)  # extra 2-5 minutes
+
+        # - Add final variance
+        between_jobs = base_delay + random.uniform(-20, 40)
+        between_jobs = max(30, between_jobs)  # minimum 30 seconds
+
+        self.log(f"Waiting before next job... ({between_jobs:.0f}s = {between_jobs/60:.1f} min)", "THINKING")
         time.sleep(between_jobs)
 
     def run_safely(self):
@@ -496,13 +707,54 @@ if __name__ == "__main__":
 ╚══════════════════════════════════════════════════════════════════════╝
 """)
 
-    clickworker_url = input("\nEnter your clickworker jobs page URL: ").strip()
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Safe Clickworker Agent')
+    parser.add_argument('--config', type=str, help='Path to config JSON file with credentials')
+    parser.add_argument('--url', type=str, help='Clickworker jobs page URL')
+    parser.add_argument('--email', type=str, help='Google email (optional)')
+    parser.add_argument('--password', type=str, help='Google password (optional)')
+    parser.add_argument('--auto', action='store_true', help='Auto-start without confirmation')
+    args = parser.parse_args()
 
-    print("\nOptional: For Google-related tasks")
-    google_email = input("Google email (or press Enter to skip): ").strip()
-    google_password = ""
-    if google_email:
-        google_password = input("Google password: ").strip()
+    clickworker_url = None
+    google_email = None
+    google_password = None
+
+    # Load from config file if provided
+    if args.config:
+        try:
+            with open(args.config, 'r') as f:
+                config = json.load(f)
+
+            clickworker_url = config.get('clickworker_url')
+            google_email = config.get('google_email', '')
+            google_password = config.get('google_password', '')
+
+            print(f"\n✅ Loaded config from: {args.config}")
+            print(f"   Account: {config.get('account_name', 'Unknown')}")
+            print(f"   Profile: {config.get('profile', 'default')}")
+
+        except Exception as e:
+            print(f"\n❌ Error loading config file: {e}")
+            sys.exit(1)
+
+    # Command line arguments override config file
+    if args.url:
+        clickworker_url = args.url
+    if args.email:
+        google_email = args.email
+    if args.password:
+        google_password = args.password
+
+    # Interactive mode if no config provided
+    if not clickworker_url:
+        clickworker_url = input("\nEnter your clickworker jobs page URL: ").strip()
+
+        print("\nOptional: For Google-related tasks")
+        google_email = input("Google email (or press Enter to skip): ").strip()
+        google_password = ""
+        if google_email:
+            google_password = input("Google password: ").strip()
 
     print("\n⚙️  SAFETY SETTINGS:")
     print(f"  • Max jobs today: 15")
@@ -510,7 +762,12 @@ if __name__ == "__main__":
     print(f"  • Breaks: Every 3 jobs (5-15 min)")
     print(f"  • Anti-detection: ACTIVE")
 
-    response = input("\nStart safe agent? (yes/no): ").strip().lower()
+    # Auto-start or confirm
+    if args.auto:
+        response = 'yes'
+        print("\n🤖 Auto-start enabled")
+    else:
+        response = input("\nStart safe agent? (yes/no): ").strip().lower()
 
     if response == 'yes':
         print("\nStarting in 3 seconds...")

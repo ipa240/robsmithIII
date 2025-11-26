@@ -185,8 +185,12 @@ def log_event(event_type, message, level='INFO', user_id=None):
     """Log event to database and broadcast to user's room"""
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    if user_id is None and current_user.is_authenticated:
-        user_id = current_user.id
+    # Try to get user_id from current_user if available
+    try:
+        if user_id is None and current_user and current_user.is_authenticated:
+            user_id = current_user.id
+    except:
+        pass  # No user context available (e.g., at startup)
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -407,7 +411,10 @@ def logout():
 @login_required
 def index():
     """Main dashboard page"""
-    return render_template('dashboard_multiuser.html', user=current_user)
+    # Show admin dashboard for admins, regular dashboard for others
+    if current_user.role == 'admin':
+        return render_template('dashboard_admin.html', user=current_user)
+    return render_template('dashboard.html', user=current_user)
 
 @app.route('/api/state')
 @login_required
@@ -449,14 +456,29 @@ def get_stats():
     result = cursor.fetchone()[0]
     total_earnings = result if result else 0.0
 
+    # Month earnings
+    cursor.execute('''
+        SELECT SUM(compensation) FROM jobs
+        WHERE user_id = ? AND accepted = 1
+        AND strftime('%Y-%m', timestamp) = strftime('%Y-%m', 'now')
+    ''', (user_id,))
+    result = cursor.fetchone()[0]
+    month_earnings = result if result else 0.0
+
     # Acceptance rate
     cursor.execute('SELECT COUNT(*) FROM jobs WHERE user_id = ? AND accepted = 1', (user_id,))
     accepted = cursor.fetchone()[0]
     acceptance_rate = (accepted / total_jobs * 100) if total_jobs > 0 else 0.0
 
+    # Last run timestamp
+    cursor.execute('''
+        SELECT MAX(timestamp) FROM jobs WHERE user_id = ?
+    ''', (user_id,))
+    last_run = cursor.fetchone()[0]
+
     # Recent jobs (last 10)
     cursor.execute('''
-        SELECT id, job_number, timestamp, duration, compensation, accepted, verified, result_data
+        SELECT id, job_number, timestamp, duration, compensation, accepted, verified, result_data, notes, screenshot_path
         FROM jobs WHERE user_id = ?
         ORDER BY timestamp DESC
         LIMIT 10
@@ -470,7 +492,9 @@ def get_stats():
             'compensation': row[4],
             'accepted': bool(row[5]),
             'verified': bool(row[6]),
-            'has_results': bool(row[7])
+            'has_results': bool(row[7]),
+            'notes': row[8],
+            'screenshot_path': row[9]
         }
         for row in cursor.fetchall()
     ]
@@ -487,10 +511,72 @@ def get_stats():
     return jsonify({
         'total_jobs': total_jobs,
         'total_earnings': total_earnings,
+        'month_earnings': month_earnings,
         'acceptance_rate': acceptance_rate,
+        'last_run': last_run,
         'recent_jobs': recent_jobs,
         'active_alerts': active_alerts
     })
+
+@app.route('/api/admin/users')
+@login_required
+def get_all_users():
+    """Get all users with stats (admin only)"""
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    # Get all users
+    cursor.execute('SELECT id, username, email, role, last_login FROM users ORDER BY id')
+    users_data = []
+
+    for row in cursor.fetchall():
+        user_id, username, email, role, last_login = row
+
+        # Get stats for each user
+        cursor.execute('SELECT COUNT(*) FROM jobs WHERE user_id = ?', (user_id,))
+        total_jobs = cursor.fetchone()[0]
+
+        cursor.execute('SELECT SUM(compensation) FROM jobs WHERE user_id = ? AND accepted = 1', (user_id,))
+        result = cursor.fetchone()[0]
+        total_earnings = result if result else 0.0
+
+        cursor.execute('''
+            SELECT SUM(compensation) FROM jobs
+            WHERE user_id = ? AND accepted = 1
+            AND strftime('%Y-%m', timestamp) = strftime('%Y-%m', 'now')
+        ''', (user_id,))
+        result = cursor.fetchone()[0]
+        month_earnings = result if result else 0.0
+
+        cursor.execute('SELECT MAX(timestamp) FROM jobs WHERE user_id = ?', (user_id,))
+        last_run = cursor.fetchone()[0]
+
+        cursor.execute('SELECT COUNT(*) FROM jobs WHERE user_id = ? AND accepted = 1', (user_id,))
+        accepted = cursor.fetchone()[0]
+        acceptance_rate = (accepted / total_jobs * 100) if total_jobs > 0 else 0.0
+
+        # Check if active (has state)
+        is_active = user_id in user_states and user_states[user_id].get('status') == 'running'
+
+        users_data.append({
+            'id': user_id,
+            'username': username,
+            'email': email,
+            'role': role,
+            'last_login': last_login,
+            'is_active': is_active,
+            'last_run': last_run,
+            'total_jobs': total_jobs,
+            'total_earnings': total_earnings,
+            'month_earnings': month_earnings,
+            'acceptance_rate': acceptance_rate
+        })
+
+    conn.close()
+    return jsonify(users_data)
 
 @app.route('/api/job/complete', methods=['POST'])
 @login_required
