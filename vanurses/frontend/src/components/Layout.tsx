@@ -38,6 +38,13 @@ export default function Layout() {
     enabled: auth.isAuthenticated
   })
 
+  // Get user data for admin check
+  const { data: userData } = useQuery({
+    queryKey: ['me'],
+    queryFn: () => api.get('/api/me').then(res => res.data.data),
+    enabled: auth.isAuthenticated
+  })
+
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: Home },
     { name: 'Jobs', href: '/jobs', icon: Briefcase },
@@ -58,12 +65,16 @@ export default function Layout() {
     { name: 'Saved Jobs', href: '/saved', icon: Bookmark },
   ]
 
+  // Filter account navigation based on admin status
   const accountNavigation = [
     { name: 'Profile', href: '/profile', icon: User },
     { name: 'Billing', href: '/billing', icon: CreditCard },
     { name: 'Support', href: '/support', icon: HelpCircle },
-    { name: 'Admin', href: '/admin', icon: Shield },
-    { name: 'HR Portal', href: '/hr', icon: Building2 },
+    // Only show Admin/HR to admins
+    ...(userData?.is_admin ? [
+      { name: 'Admin', href: '/admin', icon: Shield },
+      { name: 'HR Portal', href: '/hr', icon: Building2 },
+    ] : []),
   ]
 
   const isActive = (path: string) => location.pathname === path

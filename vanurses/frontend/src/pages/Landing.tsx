@@ -246,8 +246,11 @@ export default function Landing() {
               </div>
               <h3 className="text-xl font-semibold text-white mb-3">Verified Data</h3>
               <p className="text-slate-400">
-                Jobs scraped directly from hospital career portals. Salary data,
+                Jobs gathered directly from hospital career portals. Salary data,
                 benefits, and requirements verified.
+              </p>
+              <p className="text-xs text-slate-500 mt-3 italic">
+                Built by a nurse, for nurses like you.
               </p>
             </div>
           </div>

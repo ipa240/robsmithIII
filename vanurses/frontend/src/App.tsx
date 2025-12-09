@@ -30,6 +30,7 @@ import Callback from './pages/Callback'
 import Terms from './pages/Terms'
 import Privacy from './pages/Privacy'
 import ProtectedRoute from './components/ProtectedRoute'
+import PublicLayout from './components/PublicLayout'
 
 function App() {
   return (
@@ -40,13 +41,18 @@ function App() {
       <Route path="/terms" element={<Terms />} />
       <Route path="/privacy" element={<Privacy />} />
 
-      {/* All other routes require login */}
-      <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-        <Route path="/dashboard" element={<Dashboard />} />
+      {/* Public browsing - no login required */}
+      <Route element={<PublicLayout />}>
         <Route path="/jobs" element={<Jobs />} />
         <Route path="/jobs/:id" element={<JobDetail />} />
         <Route path="/facilities" element={<Facilities />} />
         <Route path="/facilities/:id" element={<FacilityDetail />} />
+        <Route path="/map" element={<Map />} />
+      </Route>
+
+      {/* Protected routes - require login */}
+      <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/compare" element={<Compare />} />
         <Route path="/sully" element={<Sully />} />
         <Route path="/onboarding" element={<Onboarding />} />
@@ -64,7 +70,6 @@ function App() {
         <Route path="/learn" element={<Learning />} />
         <Route path="/news" element={<News />} />
         <Route path="/scoring" element={<Scoring />} />
-        <Route path="/map" element={<Map />} />
         <Route path="/trends" element={<Trends />} />
         <Route path="/results" element={<Results />} />
       </Route>
