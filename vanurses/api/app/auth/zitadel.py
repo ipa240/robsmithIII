@@ -1,0 +1,158 @@
+"""Zitadel JWT Authentication"""
+from typing import Optional
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import jwt, JWTError
+import httpx
+from functools import lru_cache
+from sqlalchemy.orm import Session
+from ..config import get_settings
+from ..database import get_db
+
+security = HTTPBearer(auto_error=False)
+settings = get_settings()
+
+
+@lru_cache(maxsize=1)
+def get_zitadel_jwks():
+    """Fetch Zitadel's JWKS (JSON Web Key Set)"""
+    try:
+        response = httpx.get(f"{settings.zitadel_issuer}/oauth/v2/keys", timeout=10)
+        return response.json()
+    except Exception as e:
+        print(f"Failed to fetch JWKS: {e}")
+        return None
+
+
+def decode_token(token: str) -> dict:
+    """Decode and validate a Zitadel JWT token"""
+    try:
+        # Get JWKS
+        jwks = get_zitadel_jwks()
+        if not jwks:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Unable to fetch authentication keys"
+            )
+
+        # Decode without verification first to get the header
+        unverified_header = jwt.get_unverified_header(token)
+
+        # Find the matching key
+        rsa_key = None
+        for key in jwks.get("keys", []):
+            if key["kid"] == unverified_header["kid"]:
+                rsa_key = key
+                break
+
+        if not rsa_key:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token key"
+            )
+
+        # Decode and verify the token
+        payload = jwt.decode(
+            token,
+            rsa_key,
+            algorithms=["RS256"],
+            issuer=settings.zitadel_issuer,
+            audience=settings.zitadel_client_id,
+            options={"verify_aud": bool(settings.zitadel_client_id)}
+        )
+
+        return payload
+
+    except JWTError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid token: {str(e)}"
+        )
+
+
+def fetch_userinfo(token: str) -> dict:
+    """Fetch user info from Zitadel's userinfo endpoint"""
+    try:
+        response = httpx.get(
+            f"{settings.zitadel_issuer}/oidc/v1/userinfo",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10
+        )
+        if response.status_code == 200:
+            return response.json()
+        print(f"Userinfo fetch failed: {response.status_code} - {response.text}")
+        return {}
+    except Exception as e:
+        print(f"Error fetching userinfo: {e}")
+        return {}
+
+
+class CurrentUser:
+    """Represents the authenticated user from Zitadel"""
+    def __init__(self, payload: dict, userinfo: dict = None):
+        # Merge payload with userinfo (userinfo takes precedence for user data)
+        data = {**payload, **(userinfo or {})}
+        self.zitadel_id = data.get("sub")
+        self.email = data.get("email")
+        self.email_verified = data.get("email_verified", False)
+        self.name = data.get("name", "")
+        self.given_name = data.get("given_name", "")
+        self.family_name = data.get("family_name", "")
+        self.roles = data.get("urn:zitadel:iam:org:project:roles", {})
+
+    @property
+    def is_admin(self) -> bool:
+        return "admin" in self.roles
+
+
+async def get_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+) -> CurrentUser:
+    """Dependency to get the current authenticated user"""
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    token = credentials.credentials
+    payload = decode_token(token)
+
+    # If email not in token, fetch from userinfo endpoint
+    userinfo = None
+    if not payload.get("email"):
+        userinfo = fetch_userinfo(token)
+
+    return CurrentUser(payload, userinfo)
+
+
+async def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+) -> Optional[CurrentUser]:
+    """Dependency to optionally get the current user (for public endpoints)"""
+    if not credentials:
+        return None
+
+    try:
+        token = credentials.credentials
+        payload = decode_token(token)
+
+        # If email not in token, fetch from userinfo endpoint
+        userinfo = None
+        if not payload.get("email"):
+            userinfo = fetch_userinfo(token)
+
+        return CurrentUser(payload, userinfo)
+    except HTTPException:
+        return None
+
+
+async def require_admin(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    """Dependency to require admin role"""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    return current_user

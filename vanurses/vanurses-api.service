@@ -1,0 +1,14 @@
+[Unit]
+Description=VANurses.com API Service
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=ian
+WorkingDirectory=/home/ian/vanurses
+ExecStart=/home/ian/vanurses/venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 5010
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

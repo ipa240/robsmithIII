@@ -1,0 +1,36 @@
+{
+  "name": "vanurses-e2e",
+  "version": "1.0.0",
+  "description": "Comprehensive E2E tests for VANurses application",
+  "scripts": {
+    "test": "npx playwright test --project=chromium",
+    "test:all": "npx playwright test --project=chromium --reporter=list",
+    "test:headed": "npx playwright test --headed --project=chromium",
+    "test:ui": "npx playwright test --ui",
+    "test:debug": "npx playwright test --debug --project=chromium",
+    "test:journey": "npx playwright test complete-user-journey.spec.ts --project=chromium --reporter=list",
+    "test:journey:headed": "npx playwright test complete-user-journey.spec.ts --project=chromium --headed",
+    "test:smoke": "npx playwright test complete-user-journey.spec.ts -g 'Quick Smoke Test' --project=chromium",
+    "test:normalize": "npx playwright test complete-user-journey.spec.ts -g 'Data Normalization' --project=chromium",
+    "test:auth": "npx playwright test tests/auth.spec.ts --project=chromium",
+    "test:billing": "npx playwright test tests/billing.spec.ts --project=chromium",
+    "test:jobs": "npx playwright test tests/jobs.spec.ts --project=chromium",
+    "test:facilities": "npx playwright test tests/facilities.spec.ts --project=chromium",
+    "test:sully": "npx playwright test tests/sully.spec.ts --project=chromium",
+    "test:navigation": "npx playwright test tests/navigation.spec.ts --project=chromium",
+    "test:api": "npx playwright test tests/api.spec.ts --project=chromium",
+    "test:critical": "npx playwright test tests/billing.spec.ts tests/auth.spec.ts --project=chromium",
+    "test:visual": "npx playwright test tests/visual.spec.ts --project=chromium",
+    "test:consistency": "npx playwright test data-consistency.spec.ts --project=chromium --reporter=list",
+    "test:consistency:fix": "npx playwright test data-consistency.spec.ts --project=chromium --reporter=list --update-snapshots",
+    "report": "npx playwright show-report",
+    "install-browsers": "npx playwright install chromium"
+  },
+  "keywords": ["e2e", "playwright", "testing", "vanurses"],
+  "author": "VANurses Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "typescript": "^5.3.0"
+  }
+}

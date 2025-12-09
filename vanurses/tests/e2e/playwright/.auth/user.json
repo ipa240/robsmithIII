@@ -1,0 +1,135 @@
+{
+  "cookies": [
+    {
+      "name": "CLID",
+      "value": "6bd57082aaa24e91acbbc9346c85abd6.20251209.20261209",
+      "domain": "www.clarity.ms",
+      "path": "/",
+      "expires": 1796780878.859808,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_clck",
+      "value": "umyg26%5E2%5Eg1p%5E0%5E2169",
+      "domain": ".vanurses.net",
+      "path": "/",
+      "expires": 1796780878,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "MUID",
+      "value": "37B781ED273A6C21156B975026976DEB",
+      "domain": ".bing.com",
+      "path": "/",
+      "expires": 1798940880.405154,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "MR",
+      "value": "0",
+      "domain": ".c.bing.com",
+      "path": "/",
+      "expires": 1765849680.40524,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "SRM_B",
+      "value": "37B781ED273A6C21156B975026976DEB",
+      "domain": ".c.bing.com",
+      "path": "/",
+      "expires": 1798940880.405266,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "SM",
+      "value": "C",
+      "domain": ".c.clarity.ms",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "MUID",
+      "value": "37B781ED273A6C21156B975026976DEB",
+      "domain": ".clarity.ms",
+      "path": "/",
+      "expires": 1798940879.42245,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "MR",
+      "value": "0",
+      "domain": ".c.clarity.ms",
+      "path": "/",
+      "expires": 1765849679.422497,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "ANONCHK",
+      "value": "0",
+      "domain": ".c.clarity.ms",
+      "path": "/",
+      "expires": 1765245479.422512,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "__Host-zitadel.login.csrf",
+      "value": "MTc2NTI0NDg3OXxJa1ZLUTFOcFNHWTVWa3BLY25CMWFqTTRPWEIzS3l0S0swaDZaMUJXUzBsMVpXTXpNVVZMVTNwa1N6ZzlJZ289fL4qr1obwgFesFqcsjBd7f8bhhEqmnLBj6yl3Y9wSVzv",
+      "domain": "auth.vanurses.net",
+      "path": "/",
+      "expires": 1765288081.142984,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "mode",
+      "value": "auto-light",
+      "domain": "auth.vanurses.net",
+      "path": "/",
+      "expires": 1796780883,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "__Host-zitadel.useragent",
+      "value": "MTc2NTI0NDg4OXxhREZYNUlUb1F2SFdNMXA2dXRraTRIcldBVzJ5aGMzR0xNOGE3d3g4MUlXMEdGTWRJWmJhYXY2R3JCdmcwU0IydjdMQlRFTXNCN2R5aG9JZktFYlB3OFNhZm4weXl3PT18cZtrJ2tIwrQnX_rqkRr3fU-1cQkf8e8iocKzQc4Zw5Y=",
+      "domain": "auth.vanurses.net",
+      "path": "/",
+      "expires": 1796780891.112505,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_clsk",
+      "value": "dsw99n%5E1765244895374%5E5%5E1%5En.clarity.ms%2Fcollect",
+      "domain": ".vanurses.net",
+      "path": "/",
+      "expires": 1765331295,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": []
+}
