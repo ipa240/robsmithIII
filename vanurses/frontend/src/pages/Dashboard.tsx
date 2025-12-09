@@ -81,9 +81,9 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards - Clickable Links */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <Link to="/jobs" className="bg-white rounded-xl border border-slate-200 p-6 hover:border-primary-300 hover:shadow-md transition-all">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-primary-50 rounded-xl flex items-center justify-center">
               <Briefcase className="w-6 h-6 text-primary-600" />
@@ -95,9 +95,9 @@ export default function Dashboard() {
               <div className="text-sm text-slate-500">Active Jobs</div>
             </div>
           </div>
-        </div>
+        </Link>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <Link to="/facilities" className="bg-white rounded-xl border border-slate-200 p-6 hover:border-emerald-300 hover:shadow-md transition-all">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center">
               <Building2 className="w-6 h-6 text-emerald-600" />
@@ -109,9 +109,9 @@ export default function Dashboard() {
               <div className="text-sm text-slate-500">Facilities</div>
             </div>
           </div>
-        </div>
+        </Link>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <Link to="/saved" className="bg-white rounded-xl border border-slate-200 p-6 hover:border-amber-300 hover:shadow-md transition-all">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center">
               <Bookmark className="w-6 h-6 text-amber-600" />
@@ -123,9 +123,9 @@ export default function Dashboard() {
               <div className="text-sm text-slate-500">Saved Jobs</div>
             </div>
           </div>
-        </div>
+        </Link>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <Link to="/trends" className="bg-white rounded-xl border border-slate-200 p-6 hover:border-purple-300 hover:shadow-md transition-all">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center">
               <DollarSign className="w-6 h-6 text-purple-600" />
@@ -137,8 +137,43 @@ export default function Dashboard() {
               <div className="text-sm text-slate-500">Avg Hourly</div>
             </div>
           </div>
-        </div>
+        </Link>
       </div>
+
+      {/* Personalized Matches CTA - Paid Feature */}
+      {user?.tier && user.tier !== 'free' ? (
+        <Link
+          to="/results"
+          className="block bg-gradient-to-r from-primary-600 to-accent-600 rounded-xl p-6 text-white hover:opacity-95 transition-opacity"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold mb-1">See Your Personalized Matches</h2>
+              <p className="text-primary-100">
+                Jobs ranked by your priorities • Updated with your preferences
+              </p>
+            </div>
+            <ArrowRight className="w-6 h-6" />
+          </div>
+        </Link>
+      ) : (
+        <div className="bg-gradient-to-r from-slate-100 to-slate-200 rounded-xl p-6 border border-slate-300">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-800 mb-1">Unlock Personalized Job Matches</h2>
+              <p className="text-slate-600 text-sm">
+                Upgrade to see jobs ranked by your priorities and preferences
+              </p>
+            </div>
+            <Link
+              to="/billing"
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium"
+            >
+              Upgrade
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Recent Jobs */}
       <div className="bg-white rounded-xl border border-slate-200 p-6">
@@ -193,11 +228,16 @@ export default function Dashboard() {
               className="block p-4 rounded-lg border border-slate-100 hover:border-primary-200 hover:bg-primary-50/50 transition-colors"
             >
               <div className="flex items-center gap-4">
-                {facility.score && (
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold grade-${facility.score.ofs_grade}`}>
-                    {facility.score.ofs_grade}
-                  </div>
-                )}
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold ${
+                  facility.score?.ofs_grade === 'A' || facility.ofs_grade === 'A' ? 'bg-emerald-500' :
+                  facility.score?.ofs_grade === 'B' || facility.ofs_grade === 'B' ? 'bg-blue-500' :
+                  facility.score?.ofs_grade === 'C' || facility.ofs_grade === 'C' ? 'bg-amber-500' :
+                  facility.score?.ofs_grade === 'D' || facility.ofs_grade === 'D' ? 'bg-orange-500' :
+                  facility.score?.ofs_grade === 'F' || facility.ofs_grade === 'F' ? 'bg-red-500' :
+                  'bg-slate-400'
+                }`}>
+                  {facility.score?.ofs_grade || facility.ofs_grade || '-'}
+                </div>
                 <div className="flex-1">
                   <h3 className="font-medium text-slate-900">{facility.name}</h3>
                   <div className="text-sm text-slate-500">

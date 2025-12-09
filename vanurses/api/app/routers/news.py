@@ -17,59 +17,7 @@ from ..services.news_fetcher import (
 
 router = APIRouter(prefix="/api/news", tags=["news"])
 
-# Sample articles as fallback when DB is empty
-SAMPLE_ARTICLES = [
-    {
-        "id": str(uuid.uuid4())[:12],
-        "title": "Virginia Hospitals See 15% Increase in Nursing Staff",
-        "summary": "Following aggressive recruitment efforts and improved compensation packages, Virginia healthcare facilities report significant gains in nursing staff levels across the state.",
-        "source": "Healthcare Dive",
-        "source_url": "https://www.healthcaredive.com",
-        "image_url": None,
-        "category": "virginia",
-        "published_at": (datetime.now() - timedelta(hours=2)).isoformat()
-    },
-    {
-        "id": str(uuid.uuid4())[:12],
-        "title": "New NCLEX Pass Rates Show Promising Trends for 2025",
-        "summary": "The latest NCLEX pass rate data indicates a 3% improvement nationwide, with Virginia nursing programs among the top performers.",
-        "source": "American Nurse Journal",
-        "source_url": "https://www.myamericannurse.com",
-        "image_url": None,
-        "category": "nursing",
-        "published_at": (datetime.now() - timedelta(hours=18)).isoformat()
-    },
-    {
-        "id": str(uuid.uuid4())[:12],
-        "title": "CMS Announces Updates to Hospital Rating System",
-        "summary": "The Centers for Medicare & Medicaid Services has released updates to the hospital star rating methodology, with greater emphasis on nurse staffing levels.",
-        "source": "Modern Healthcare",
-        "source_url": "https://www.modernhealthcare.com",
-        "image_url": None,
-        "category": "hospitals",
-        "published_at": (datetime.now() - timedelta(days=2)).isoformat()
-    },
-    {
-        "id": str(uuid.uuid4())[:12],
-        "title": "Travel Nurse Demand Stabilizes After Pandemic Surge",
-        "summary": "Industry analysts report that travel nursing rates and demand have reached a new equilibrium, with rates settling at approximately 30% above pre-pandemic levels.",
-        "source": "Becker's Hospital Review",
-        "source_url": "https://www.beckershospitalreview.com",
-        "image_url": None,
-        "category": "nursing",
-        "published_at": (datetime.now() - timedelta(days=3)).isoformat()
-    },
-    {
-        "id": str(uuid.uuid4())[:12],
-        "title": "Virginia Board of Nursing Updates License Renewal Requirements",
-        "summary": "Starting in 2026, Virginia nurses will have new CEU requirements including mandatory cultural competency and telehealth training.",
-        "source": "Virginia Department of Health",
-        "source_url": "https://www.vdh.virginia.gov",
-        "image_url": None,
-        "category": "virginia",
-        "published_at": (datetime.now() - timedelta(days=4)).isoformat()
-    },
-]
+# No more hardcoded sample articles - return empty if DB is empty
 
 
 @router.get("")
@@ -89,13 +37,8 @@ async def list_news(
     except Exception as e:
         print(f"Database error: {e}")
 
-    # Fall back to sample articles
-    result = SAMPLE_ARTICLES.copy()
-    if category and category != "all":
-        result = [a for a in result if a["category"] == category]
-
-    result.sort(key=lambda x: x["published_at"], reverse=True)
-    return result[offset:offset + limit]
+    # Return empty list if no articles in database
+    return []
 
 
 @router.get("/trending")
@@ -108,9 +51,8 @@ async def get_trending(db: Session = Depends(get_db)):
     except:
         pass
 
-    # Fallback
-    articles = sorted(SAMPLE_ARTICLES, key=lambda x: x["published_at"], reverse=True)
-    return articles[:5]
+    # Return empty list if no articles
+    return []
 
 
 @router.get("/categories")
@@ -136,14 +78,14 @@ async def get_categories(db: Session = Depends(get_db)):
     except:
         pass
 
-    # Fallback
+    # Return default categories with zero counts if DB is empty
     return [
-        {"id": "all", "name": "All News", "count": len(SAMPLE_ARTICLES)},
-        {"id": "virginia", "name": "Virginia", "count": len([a for a in SAMPLE_ARTICLES if a["category"] == "virginia"])},
-        {"id": "nursing", "name": "Nursing", "count": len([a for a in SAMPLE_ARTICLES if a["category"] == "nursing"])},
-        {"id": "hospitals", "name": "Hospitals", "count": len([a for a in SAMPLE_ARTICLES if a["category"] == "hospitals"])},
-        {"id": "legislation", "name": "Legislation", "count": len([a for a in SAMPLE_ARTICLES if a["category"] == "legislation"])},
-        {"id": "research", "name": "Research", "count": len([a for a in SAMPLE_ARTICLES if a["category"] == "research"])},
+        {"id": "all", "name": "All News", "count": 0},
+        {"id": "virginia", "name": "Virginia", "count": 0},
+        {"id": "nursing", "name": "Nursing", "count": 0},
+        {"id": "hospitals", "name": "Hospitals", "count": 0},
+        {"id": "legislation", "name": "Legislation", "count": 0},
+        {"id": "research", "name": "Research", "count": 0},
     ]
 
 
@@ -195,13 +137,8 @@ async def get_article(article_id: str, db: Session = Depends(get_db)):
                 "category": result.category,
                 "published_at": result.published_at.isoformat() if result.published_at else None
             }
-    except:
-        pass
-
-    # Check sample articles
-    for article in SAMPLE_ARTICLES:
-        if article["id"] == article_id:
-            return article
+    except Exception as e:
+        print(f"Error fetching article: {e}")
 
     return {"error": "Article not found"}
 

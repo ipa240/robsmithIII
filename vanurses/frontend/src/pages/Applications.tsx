@@ -51,6 +51,11 @@ export default function Applications() {
   const [editingNextStep, setEditingNextStep] = useState(false)
   const [nextStepData, setNextStepData] = useState({ step: '', date: '' })
 
+  // Drag and drop state for visual feedback
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<string | null>(null)
+  const [updateError, setUpdateError] = useState<string | null>(null)
+
   const { data: applications = [], isLoading } = useQuery<Application[]>({
     queryKey: ['applications'],
     queryFn: () => api.get('/api/applications').then(res => res.data)
@@ -59,7 +64,30 @@ export default function Applications() {
   const updateStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       api.patch(`/api/applications/${id}`, { status }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['applications'] })
+    // Optimistic update for smooth drag & drop
+    onMutate: async ({ id, status }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['applications'] })
+      // Snapshot the previous value
+      const previousApps = queryClient.getQueryData<Application[]>(['applications'])
+      // Optimistically update to the new value
+      queryClient.setQueryData<Application[]>(['applications'], (old) =>
+        old?.map((app) => (app.id === id ? { ...app, status: status as Application['status'] } : app)) || []
+      )
+      // Return context with snapshot
+      return { previousApps }
+    },
+    onError: (err, variables, context) => {
+      // Rollback on error
+      if (context?.previousApps) {
+        queryClient.setQueryData(['applications'], context.previousApps)
+      }
+      setUpdateError('Failed to update status. Please try again.')
+      setTimeout(() => setUpdateError(null), 3000)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['applications'] })
+    }
   })
 
   const addNote = useMutation({
@@ -91,18 +119,43 @@ export default function Applications() {
 
   const handleDragStart = (e: React.DragEvent, app: Application) => {
     e.dataTransfer.setData('application/json', JSON.stringify(app))
+    e.dataTransfer.effectAllowed = 'move'
+    setDraggingId(app.id)
+  }
+
+  const handleDragEnd = () => {
+    setDraggingId(null)
+    setDropTarget(null)
   }
 
   const handleDrop = (e: React.DragEvent, status: string) => {
     e.preventDefault()
-    const app = JSON.parse(e.dataTransfer.getData('application/json')) as Application
-    if (app.status !== status) {
-      updateStatus.mutate({ id: app.id, status })
+    setDropTarget(null)
+    try {
+      const app = JSON.parse(e.dataTransfer.getData('application/json')) as Application
+      if (app.status !== status) {
+        updateStatus.mutate({ id: app.id, status })
+      }
+    } catch (err) {
+      console.error('Failed to parse drag data:', err)
     }
+    setDraggingId(null)
   }
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleDragEnter = (status: string) => {
+    setDropTarget(status)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear if leaving the column entirely (not entering a child element)
+    if (e.relatedTarget && !(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+      setDropTarget(null)
+    }
   }
 
   const getColumnApps = (status: string) =>
@@ -177,15 +230,27 @@ export default function Applications() {
         </div>
       </div>
 
+      {/* Error Toast */}
+      {updateError && (
+        <div className="fixed bottom-4 right-4 bg-red-500 text-white px-4 py-3 rounded-lg shadow-lg z-50 flex items-center gap-2">
+          <X className="w-4 h-4" />
+          {updateError}
+        </div>
+      )}
+
       {/* Kanban View */}
       {view === 'kanban' && (
         <div className="grid grid-cols-4 gap-4">
           {KANBAN_COLUMNS.map(status => (
             <div
               key={status}
-              className={`rounded-xl p-4 min-h-[400px] ${STATUS_CONFIG[status].bgColor}`}
+              className={`rounded-xl p-4 min-h-[400px] transition-all duration-200 ${STATUS_CONFIG[status].bgColor} ${
+                dropTarget === status ? 'ring-2 ring-primary-500 ring-offset-2 bg-primary-50' : ''
+              }`}
               onDrop={e => handleDrop(e, status)}
               onDragOver={handleDragOver}
+              onDragEnter={() => handleDragEnter(status)}
+              onDragLeave={handleDragLeave}
             >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-slate-900">
@@ -201,11 +266,14 @@ export default function Applications() {
                     key={app.id}
                     draggable
                     onDragStart={e => handleDragStart(e, app)}
+                    onDragEnd={handleDragEnd}
                     onClick={() => setSelectedApp(app)}
-                    className="bg-white rounded-lg p-4 shadow-sm border border-slate-200 cursor-pointer hover:shadow-md transition-shadow"
+                    className={`bg-white rounded-lg p-4 shadow-sm border border-slate-200 cursor-pointer hover:shadow-md transition-all duration-200 ${
+                      draggingId === app.id ? 'opacity-50 scale-95 ring-2 ring-primary-400' : ''
+                    }`}
                   >
                     <div className="flex items-start gap-2 mb-2">
-                      <GripVertical className="w-4 h-4 text-slate-300 mt-0.5 cursor-grab" />
+                      <GripVertical className="w-4 h-4 text-slate-300 mt-0.5 cursor-grab active:cursor-grabbing" />
                       <div className="flex-1">
                         <p className="font-medium text-slate-900 text-sm">{app.job_title}</p>
                         <p className="text-xs text-slate-500">{app.facility_name}</p>
@@ -222,6 +290,12 @@ export default function Applications() {
                     )}
                   </div>
                 ))}
+                {/* Drop indicator when column is empty and being dragged over */}
+                {getColumnApps(status).length === 0 && dropTarget === status && (
+                  <div className="border-2 border-dashed border-primary-400 rounded-lg p-4 text-center text-primary-600 text-sm">
+                    Drop here
+                  </div>
+                )}
               </div>
             </div>
           ))}

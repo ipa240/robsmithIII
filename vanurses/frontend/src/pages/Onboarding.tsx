@@ -5,7 +5,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Check, ChevronRight, ChevronLeft, Heart, Star, Crown, Sparkles } from 'lucide-react'
 import { api, setAuthToken } from '../api/client'
 
-const NURSING_TYPES = ['RN', 'LPN', 'LVN', 'CNA', 'NP', 'CRNA', 'CNM', 'CNS', 'APRN']
+const NURSING_TYPES = ['RN', 'LPN', 'CNA', 'NP', 'CRNA', 'CNM', 'CNS']
 const SPECIALTIES = [
   'ICU', 'ER', 'OR', 'Med-Surg', 'Telemetry', 'L&D', 'NICU', 'Peds',
   'Psych', 'Oncology', 'Dialysis', 'Home Health', 'Cardiac', 'Cath Lab',
@@ -45,7 +45,7 @@ const TIERS = [
     features: [
       'Browse all jobs',
       'View facility ratings',
-      '5 Sully AI chats/month',
+      '3 Sully AI chats/day',
       'Basic job search',
     ],
   },
@@ -204,15 +204,12 @@ function OnboardingComplete({ formData }: { formData: any }) {
                 </span>
               </div>
               <ul className="text-[11px] text-slate-600 space-y-0.5">
-                {tier.features.slice(0, 3).map(f => (
+                {tier.features.map(f => (
                   <li key={f} className="flex items-center gap-1">
                     <Check className="w-3 h-3 text-emerald-500 flex-shrink-0" />
                     {f}
                   </li>
                 ))}
-                {tier.features.length > 3 && (
-                  <li className="text-slate-400">+{tier.features.length - 3} more</li>
-                )}
               </ul>
             </button>
           ))}

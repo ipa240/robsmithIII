@@ -57,37 +57,90 @@ def get_admin_user(current_user: CurrentUser, db: Session) -> dict:
 # Dashboard Stats
 @router.get("/stats")
 async def get_admin_stats(db: Session = Depends(get_db)):
-    """Get system-wide admin statistics"""
-    # TODO: Get actual stats from database
-    # For now return mock data
+    """Get system-wide admin statistics from database"""
+    # User stats
+    user_stats = db.execute(text("""
+        SELECT
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE) as new_today,
+            COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - INTERVAL '7 days') as new_this_week,
+            COUNT(*) FILTER (WHERE tier != 'free') as active_subscriptions,
+            COUNT(*) FILTER (WHERE tier = 'free') as trial_users
+        FROM users
+    """)).first()
+
+    # Facility stats
+    facility_stats = db.execute(text("""
+        SELECT
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE id IN (SELECT facility_id FROM facility_scores)) as with_scores,
+            COALESCE(ROUND(AVG(ofs_score)::numeric, 1), 0) as average_ofs
+        FROM facilities
+        LEFT JOIN facility_scores fs ON facilities.id = fs.facility_id
+    """)).first()
+
+    # Job stats
+    job_stats = db.execute(text("""
+        SELECT
+            COUNT(*) FILTER (WHERE is_active = true) as total_active,
+            COUNT(*) FILTER (WHERE scraped_at >= CURRENT_DATE) as new_today,
+            COUNT(*) FILTER (WHERE scraped_at >= CURRENT_DATE - INTERVAL '7 days') as scraped_this_week
+        FROM jobs
+    """)).first()
+
+    # Sully stats (from sully_interactions if table exists)
+    sully_stats = {"questions_today": 0, "questions_this_week": 0, "avg_response_time_ms": 0}
+    try:
+        sully_result = db.execute(text("""
+            SELECT
+                COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE) as questions_today,
+                COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - INTERVAL '7 days') as questions_this_week
+            FROM sully_interactions
+        """)).first()
+        if sully_result:
+            sully_stats = {
+                "questions_today": sully_result.questions_today or 0,
+                "questions_this_week": sully_result.questions_this_week or 0,
+                "avg_response_time_ms": 0
+            }
+    except Exception:
+        pass
+
+    # Revenue stats (estimate based on tiers)
+    revenue_stats = db.execute(text("""
+        SELECT
+            COUNT(*) FILTER (WHERE tier = 'starter') * 9.99 +
+            COUNT(*) FILTER (WHERE tier = 'pro') * 19.99 +
+            COUNT(*) FILTER (WHERE tier = 'premium') * 39.99 as mrr,
+            COUNT(*) FILTER (WHERE tier != 'free' AND created_at >= CURRENT_DATE - INTERVAL '30 days') as new_subs_this_month
+        FROM users
+    """)).first()
+
+    mrr = float(revenue_stats.mrr or 0)
 
     return {
         "users": {
-            "total": 1247,
-            "new_today": 15,
-            "new_this_week": 89,
-            "active_subscriptions": 342,
-            "trial_users": 156
+            "total": user_stats.total or 0,
+            "new_today": user_stats.new_today or 0,
+            "new_this_week": user_stats.new_this_week or 0,
+            "active_subscriptions": user_stats.active_subscriptions or 0,
+            "trial_users": user_stats.trial_users or 0
         },
         "facilities": {
-            "total": 186,
-            "with_scores": 178,
-            "average_ofs": 72.4
+            "total": facility_stats.total or 0,
+            "with_scores": facility_stats.with_scores or 0,
+            "average_ofs": float(facility_stats.average_ofs or 0)
         },
         "jobs": {
-            "total_active": 3421,
-            "new_today": 87,
-            "scraped_this_week": 1245
+            "total_active": job_stats.total_active or 0,
+            "new_today": job_stats.new_today or 0,
+            "scraped_this_week": job_stats.scraped_this_week or 0
         },
-        "sully": {
-            "questions_today": 423,
-            "questions_this_week": 2891,
-            "avg_response_time_ms": 2340
-        },
+        "sully": sully_stats,
         "revenue": {
-            "mrr": 6780,
-            "arr": 81360,
-            "new_subs_this_month": 28
+            "mrr": round(mrr, 2),
+            "arr": round(mrr * 12, 2),
+            "new_subs_this_month": revenue_stats.new_subs_this_month or 0
         }
     }
 
@@ -101,32 +154,46 @@ async def list_users(
     offset: int = 0,
     db: Session = Depends(get_db)
 ):
-    """List users with filtering"""
-    # TODO: Get actual users from database
-    mock_users = [
-        {
-            "id": "user-1",
-            "email": "nurse.jane@example.com",
-            "name": "Jane Smith",
-            "tier": "pro",
-            "created_at": "2025-11-15T10:30:00Z",
-            "last_login": "2025-12-06T14:22:00Z",
-            "sully_questions_today": 3
-        },
-        {
-            "id": "user-2",
-            "email": "john.doe@example.com",
-            "name": "John Doe",
-            "tier": "starter",
-            "created_at": "2025-10-20T08:15:00Z",
-            "last_login": "2025-12-06T09:45:00Z",
-            "sully_questions_today": 1
-        }
-    ]
+    """List users with filtering from database"""
+    # Build query with filters
+    params = {"limit": limit, "offset": offset}
+
+    where_clauses = []
+    if search:
+        where_clauses.append("(email ILIKE '%' || :search || '%' OR COALESCE(name, '') ILIKE '%' || :search || '%')")
+        params["search"] = search
+    if tier:
+        where_clauses.append("tier = :tier")
+        params["tier"] = tier
+
+    where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+    # Get users
+    result = db.execute(text(f"""
+        SELECT id, email, name, tier, is_admin, created_at, last_login_at
+        FROM users
+        {where_sql}
+        ORDER BY created_at DESC
+        LIMIT :limit OFFSET :offset
+    """), params)
+
+    users = []
+    for row in result:
+        user = dict(row._mapping)
+        user["id"] = str(user["id"])
+        user["created_at"] = user["created_at"].isoformat() if user["created_at"] else None
+        user["last_login"] = user["last_login_at"].isoformat() if user.get("last_login_at") else None
+        user["sully_questions_today"] = 0  # Could add sully_interactions query if needed
+        users.append(user)
+
+    # Get total count
+    count_result = db.execute(text(f"""
+        SELECT COUNT(*) as total FROM users {where_sql}
+    """), params).first()
 
     return {
-        "users": mock_users,
-        "total": len(mock_users),
+        "users": users,
+        "total": count_result.total if count_result else 0,
         "limit": limit,
         "offset": offset
     }
@@ -139,14 +206,31 @@ async def update_user_tier(user_id: str, tier: str, db: Session = Depends(get_db
     if tier not in valid_tiers:
         raise HTTPException(status_code=400, detail="Invalid tier")
 
-    # TODO: Update actual user in database
+    # Update user tier in database
+    result = db.execute(
+        text("UPDATE users SET tier = :tier WHERE id = :user_id RETURNING id"),
+        {"tier": tier, "user_id": user_id}
+    ).first()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    db.commit()
     return {"success": True, "user_id": user_id, "new_tier": tier}
 
 
 @router.post("/users/{user_id}/ban")
 async def ban_user(user_id: str, reason: Optional[str] = None, db: Session = Depends(get_db)):
-    """Ban a user"""
-    # TODO: Implement actual ban logic
+    """Ban a user by setting is_active to false"""
+    result = db.execute(
+        text("UPDATE users SET is_active = FALSE WHERE id = :user_id RETURNING id"),
+        {"user_id": user_id}
+    ).first()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    db.commit()
     return {"success": True, "user_id": user_id, "banned": True}
 
 
@@ -391,26 +475,57 @@ async def trigger_scraper(db: Session = Depends(get_db)):
 
 @router.get("/scraper/status")
 async def get_scraper_status(db: Session = Depends(get_db)):
-    """Get scraper status"""
+    """Get scraper status from database"""
+    # Get latest scraper run
+    result = db.execute(text("""
+        SELECT id, started_at, completed_at, status, jobs_found
+        FROM scraper_runs
+        ORDER BY started_at DESC
+        LIMIT 1
+    """)).first()
+
+    if result:
+        return {
+            "status": result.status or "idle",
+            "last_run": result.completed_at.isoformat() if result.completed_at else result.started_at.isoformat(),
+            "jobs_found": result.jobs_found or 0,
+            "next_scheduled": None  # Could calculate based on cron schedule
+        }
+
     return {
-        "status": "idle",
-        "last_run": "2025-12-06T03:00:00Z",
-        "jobs_found": 87,
-        "next_scheduled": "2025-12-07T03:00:00Z"
+        "status": "no_runs",
+        "last_run": None,
+        "jobs_found": 0,
+        "next_scheduled": None
     }
 
 
 @router.get("/scraper/logs")
 async def get_scraper_logs(limit: int = 100, db: Session = Depends(get_db)):
-    """Get recent scraper logs"""
-    # TODO: Get actual logs
-    return {
-        "logs": [
-            {"timestamp": "2025-12-06T03:00:00Z", "level": "INFO", "message": "Scraper started"},
-            {"timestamp": "2025-12-06T03:05:23Z", "level": "INFO", "message": "Found 87 new jobs"},
-            {"timestamp": "2025-12-06T03:05:25Z", "level": "INFO", "message": "Scraper completed"}
-        ]
-    }
+    """Get recent scraper runs from database"""
+    result = db.execute(text("""
+        SELECT id, started_at, completed_at, status, jobs_found, errors
+        FROM scraper_runs
+        ORDER BY started_at DESC
+        LIMIT :limit
+    """), {"limit": limit})
+
+    logs = []
+    for row in result:
+        if row.started_at:
+            logs.append({
+                "timestamp": row.started_at.isoformat(),
+                "level": "INFO",
+                "message": f"Scraper started"
+            })
+        if row.completed_at:
+            logs.append({
+                "timestamp": row.completed_at.isoformat(),
+                "level": "INFO" if row.status == "completed" else "ERROR",
+                "message": f"Found {row.jobs_found} jobs" if row.status == "completed" else (row.errors or "Scraper failed")
+            })
+
+    return {"logs": logs if logs else []}
 
 
 # Support Tickets
@@ -420,20 +535,35 @@ async def list_support_tickets(
     limit: int = 50,
     db: Session = Depends(get_db)
 ):
-    """List support tickets"""
-    # TODO: Get actual tickets from database
-    mock_tickets = [
-        {
-            "id": "ticket-1",
-            "user_email": "user@example.com",
-            "subject": "Cannot access facility scores",
-            "message": "When I try to view facility details, the scores don't load.",
-            "status": "open",
-            "created_at": "2025-12-06T10:30:00Z"
-        }
-    ]
+    """List support tickets from database"""
+    params = {"limit": limit}
+    where_sql = ""
+    if status:
+        where_sql = "WHERE status = :status"
+        params["status"] = status
 
-    return {"tickets": mock_tickets, "total": len(mock_tickets)}
+    result = db.execute(text(f"""
+        SELECT id, user_id, user_email, subject, message, status, priority, created_at
+        FROM support_tickets
+        {where_sql}
+        ORDER BY created_at DESC
+        LIMIT :limit
+    """), params)
+
+    tickets = []
+    for row in result:
+        ticket = dict(row._mapping)
+        ticket["id"] = str(ticket["id"])
+        ticket["user_id"] = str(ticket["user_id"]) if ticket.get("user_id") else None
+        ticket["created_at"] = ticket["created_at"].isoformat() if ticket["created_at"] else None
+        tickets.append(ticket)
+
+    # Get total count
+    count_result = db.execute(text(f"""
+        SELECT COUNT(*) as total FROM support_tickets {where_sql}
+    """), params).first()
+
+    return {"tickets": tickets, "total": count_result.total if count_result else 0}
 
 
 @router.patch("/tickets/{ticket_id}")
@@ -444,6 +574,26 @@ async def update_ticket(
     db: Session = Depends(get_db)
 ):
     """Update a support ticket"""
+    updates = ["updated_at = NOW()"]
+    params = {"ticket_id": ticket_id}
+
+    if status:
+        updates.append("status = :status")
+        params["status"] = status
+
+    db.execute(
+        text(f"UPDATE support_tickets SET {', '.join(updates)} WHERE id = :ticket_id"),
+        params
+    )
+
+    # Add response as ticket message if provided
+    if response:
+        db.execute(text("""
+            INSERT INTO ticket_messages (ticket_id, sender_type, message)
+            VALUES (:ticket_id, 'support', :message)
+        """), {"ticket_id": ticket_id, "message": response})
+
+    db.commit()
     return {"success": True, "ticket_id": ticket_id}
 
 
