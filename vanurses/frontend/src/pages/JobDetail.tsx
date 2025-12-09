@@ -1,19 +1,32 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from 'react-oidc-context'
 import {
   ArrowLeft, MapPin, Clock, DollarSign, Building2, Bookmark, BookmarkCheck,
-  ExternalLink, Calendar, Award, Stethoscope, CheckCircle
+  ExternalLink, Calendar, Award, Stethoscope, CheckCircle, Lock, Sparkles, Crown
 } from 'lucide-react'
 import { api } from '../api/client'
 import { toTitleCase } from '../utils/format'
+import { useJobViewLimit } from '../hooks/useJobViewLimit'
+import { useSavedJobLimit } from '../hooks/useSavedJobLimit'
+import { useSubscription } from '../hooks/useSubscription'
 
 export default function JobDetail() {
   const { id } = useParams()
   const auth = useAuth()
   const queryClient = useQueryClient()
   const [showApplyToast, setShowApplyToast] = useState(false)
+  const { isPaid } = useSubscription()
+  const { canView, recordView, remainingViews, limitReached, hasViewed } = useJobViewLimit()
+  const { canSave: canSaveJob, limitReached: saveLimitReached } = useSavedJobLimit()
+
+  // Record job view when component mounts (only if user can view)
+  useEffect(() => {
+    if (id && canView(id)) {
+      recordView(id)
+    }
+  }, [id, canView, recordView])
 
   // Track apply click mutation
   const trackApplyMutation = useMutation({
@@ -99,6 +112,67 @@ export default function JobDetail() {
 
   const job = data
 
+  // Check if user can view this job (already viewed or under limit)
+  const canViewThisJob = id ? canView(id) : true
+  const alreadyViewed = id ? hasViewed(id) : false
+
+  // Only paid authenticated users can bypass limits
+  const hasPaidAccess = auth.isAuthenticated && isPaid
+
+  // If limit reached and this job hasn't been viewed before, show upgrade prompt
+  if (!canViewThisJob && !alreadyViewed && !hasPaidAccess) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <Link
+          to="/jobs"
+          className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-6"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Jobs
+        </Link>
+
+        <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-100 text-primary-600 mb-4">
+            <Lock className="w-8 h-8" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-3">
+            You've reached your free job view limit
+          </h2>
+          <p className="text-slate-600 mb-6 max-w-md mx-auto">
+            Free users can view up to 3 job details. You've viewed all 3 of your free jobs.
+            Upgrade to unlock unlimited job views and much more.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            {!auth.isAuthenticated ? (
+              <Link
+                to="/login"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
+              >
+                <Sparkles className="w-5 h-5" />
+                Create Free Account
+              </Link>
+            ) : (
+              <Link
+                to="/billing"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
+              >
+                <Crown className="w-5 h-5" />
+                Upgrade Now
+              </Link>
+            )}
+            <Link
+              to="/jobs"
+              className="text-slate-600 hover:text-slate-900"
+            >
+              Browse other jobs
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-4xl mx-auto">
       <Link
@@ -147,20 +221,28 @@ export default function JobDetail() {
             </div>
 
             <div className="flex gap-3">
-              {auth.isAuthenticated && (
+              {auth.isAuthenticated ? (
                 <button
                   onClick={handleToggleSave}
-                  disabled={saveMutation.isPending || unsaveMutation.isPending}
+                  disabled={saveMutation.isPending || unsaveMutation.isPending || (!isSaved && saveLimitReached)}
+                  title={!isSaved && saveLimitReached ? 'Upgrade to save more jobs' : undefined}
                   className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
                     isSaved
                       ? 'bg-primary-50 border-primary-200 text-primary-700 hover:bg-primary-100'
-                      : 'border-slate-200 hover:bg-slate-50'
+                      : saveLimitReached
+                        ? 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed'
+                        : 'border-slate-200 hover:bg-slate-50'
                   } ${(saveMutation.isPending || unsaveMutation.isPending) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   {isSaved ? (
                     <>
                       <BookmarkCheck className="w-4 h-4" />
                       Saved
+                    </>
+                  ) : saveLimitReached ? (
+                    <>
+                      <Lock className="w-4 h-4" />
+                      Save Limit
                     </>
                   ) : (
                     <>
@@ -169,6 +251,14 @@ export default function JobDetail() {
                     </>
                   )}
                 </button>
+              ) : (
+                <Link
+                  to="/login"
+                  className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
+                >
+                  <Bookmark className="w-4 h-4" />
+                  Save
+                </Link>
               )}
               {job.source_url && (
                 <button

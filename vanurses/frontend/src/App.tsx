@@ -29,6 +29,7 @@ import Results from './pages/Results'
 import Callback from './pages/Callback'
 import Terms from './pages/Terms'
 import Privacy from './pages/Privacy'
+import Goodbye from './pages/Goodbye'
 import ProtectedRoute from './components/ProtectedRoute'
 import PublicLayout from './components/PublicLayout'
 
@@ -40,6 +41,7 @@ function App() {
       <Route path="/callback" element={<Callback />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/privacy" element={<Privacy />} />
+      <Route path="/goodbye" element={<Goodbye />} />
 
       {/* Public browsing - no login required */}
       <Route element={<PublicLayout />}>

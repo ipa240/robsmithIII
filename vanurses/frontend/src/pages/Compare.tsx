@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
+import { useAuth } from 'react-oidc-context'
 import { Search, X, Trophy, ArrowLeft } from 'lucide-react'
 import { api } from '../api/client'
 import IndexRadar from '../components/scoring/IndexRadar'
+import { useSubscription } from '../hooks/useSubscription'
+import BlurOverlay from '../components/BlurOverlay'
 
 interface Facility {
   id: string
@@ -40,9 +43,54 @@ function getScoreColor(score: number | null) {
 }
 
 export default function Compare() {
+  const auth = useAuth()
+  const { isPaid } = useSubscription()
+  // Only show content if authenticated AND paid
+  const canAccessFeature = auth.isAuthenticated && isPaid
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [showSearch, setShowSearch] = useState(false)
+
+  // If user is not paid, show blur overlay over entire page
+  if (!canAccessFeature) {
+    return (
+      <BlurOverlay
+        title="Facility Comparison"
+        description="Compare facilities side-by-side with detailed OFS scores and indices. Upgrade to access this premium feature."
+        showDemo
+        demoKey="compare"
+        showPricing
+      >
+        <div className="space-y-6">
+          <div className="flex items-center gap-4">
+            <div className="w-5 h-5 bg-slate-200 rounded" />
+            <div>
+              <div className="h-8 w-64 bg-slate-200 rounded mb-2" />
+              <div className="h-5 w-48 bg-slate-100 rounded" />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 p-4">
+            <div className="h-12 w-full bg-slate-100 rounded-lg" />
+          </div>
+
+          <div className="grid grid-cols-3 gap-6">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-white rounded-xl border border-slate-200 p-6">
+                <div className="h-6 w-32 bg-slate-200 rounded mb-4" />
+                <div className="h-40 w-full bg-slate-100 rounded mb-4" />
+                <div className="space-y-2">
+                  {[1, 2, 3, 4, 5].map((j) => (
+                    <div key={j} className="h-4 w-full bg-slate-100 rounded" />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </BlurOverlay>
+    )
+  }
 
   // Search facilities
   const { data: searchResults } = useQuery({

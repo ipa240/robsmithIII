@@ -82,7 +82,8 @@ export default function FacilityDetail() {
     }
   }, [userData])
 
-  const isPaidUser = ['starter', 'pro', 'premium'].includes(userTier.toLowerCase())
+  // Only show premium content if authenticated AND has paid tier
+  const isPaidUser = auth.isAuthenticated && ['starter', 'pro', 'premium'].includes(userTier.toLowerCase())
 
   const { data: facility, isLoading } = useQuery({
     queryKey: ['facility', id],

@@ -3,7 +3,7 @@ import { Send, Loader2, Sparkles, Info, Zap } from 'lucide-react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
 
-type Mood = 'optimistic' | 'neutral' | 'stern' | 'nofilter'
+type Mood = 'optimistic' | 'neutral' | 'stern'
 
 interface Message {
   role: 'user' | 'sully'
@@ -16,7 +16,6 @@ const MOODS: { id: Mood; label: string; color: string; bgColor: string; desc: st
   { id: 'optimistic', label: 'Friendly', color: 'text-emerald-600', bgColor: 'bg-emerald-500', desc: 'Warm & encouraging', image: '/media/sully/sully-optimistic.jpg' },
   { id: 'neutral', label: 'Neutral', color: 'text-sky-600', bgColor: 'bg-sky-500', desc: 'Professional & balanced', image: '/media/sully/sully-neutral.jpg' },
   { id: 'stern', label: 'Stern', color: 'text-amber-600', bgColor: 'bg-amber-500', desc: 'Blunt & direct', image: '/media/sully/sully-stern.jpg' },
-  { id: 'nofilter', label: 'No Filter', color: 'text-red-600', bgColor: 'bg-red-500', desc: 'Vulgar & brutally honest', image: '/media/sully/sully-nofilter.jpg' },
 ]
 
 const QUICK_PROMPTS = [

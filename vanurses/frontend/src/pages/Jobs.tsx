@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Search, MapPin, Clock, DollarSign, Building2, ChevronLeft, ChevronRight, SlidersHorizontal, X, Gift, Truck, Award, Calendar } from 'lucide-react'
+import { useAuth } from 'react-oidc-context'
+import { Search, MapPin, Clock, DollarSign, Building2, ChevronLeft, ChevronRight, SlidersHorizontal, X, Gift, Truck, Award, Calendar, Lock } from 'lucide-react'
 import { api } from '../api/client'
 import { toTitleCase } from '../utils/format'
+import { useSubscription } from '../hooks/useSubscription'
 
 // Format employment types for display: full_time -> "Full Time"
 const formatEmploymentType = (type: string): string => {
@@ -32,6 +34,10 @@ const getGradeColor = (grade: string) => {
 }
 
 export default function Jobs() {
+  const auth = useAuth()
+  const { isPaid } = useSubscription()
+  // Only show grades if user is authenticated AND has a paid subscription
+  const canSeeGrades = auth.isAuthenticated && isPaid
   const [search, setSearch] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState({
@@ -463,11 +469,18 @@ export default function Jobs() {
                     <h3 className="text-lg font-semibold text-slate-900 flex-1">
                       {toTitleCase(job.title)}
                     </h3>
-                    {/* OFS Grade Badge */}
+                    {/* OFS Grade Badge - Blurred for free users */}
                     {job.facility_ofs_grade && (
-                      <span className={`px-2 py-1 text-xs font-bold rounded ${getGradeColor(job.facility_ofs_grade[0])}`} title={`Facility Score: ${job.facility_ofs_score}`}>
-                        {job.facility_ofs_grade}
-                      </span>
+                      canSeeGrades ? (
+                        <span className={`px-2 py-1 text-xs font-bold rounded ${getGradeColor(job.facility_ofs_grade[0])}`} title={`Facility Score: ${job.facility_ofs_score}`}>
+                          {job.facility_ofs_grade}
+                        </span>
+                      ) : (
+                        <span className="relative px-2 py-1 text-xs font-bold rounded bg-slate-100" title="Upgrade to view facility grade">
+                          <span className="blur-sm select-none text-slate-400">A+</span>
+                          <Lock className="absolute inset-0 m-auto w-3 h-3 text-slate-400" />
+                        </span>
+                      )
                     )}
                   </div>
 

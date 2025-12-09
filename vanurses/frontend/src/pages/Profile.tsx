@@ -1,10 +1,10 @@
 import { useAuth } from 'react-oidc-context'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   User, Mail, Shield, Heart, MapPin, Briefcase, Award,
-  Edit2, Check, X, Lock, Crown
+  Edit2, Check, X, Lock, Crown, Trash2, AlertTriangle
 } from 'lucide-react'
 import { api, setAuthToken } from '../api/client'
 
@@ -29,9 +29,11 @@ const TIER_LIMITS: Record<string, number> = {
 
 export default function Profile() {
   const auth = useAuth()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [editingPrefs, setEditingPrefs] = useState(false)
   const [priorities, setPriorities] = useState<Record<string, number>>({})
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   useEffect(() => {
     if (auth.user?.access_token) {
@@ -57,6 +59,19 @@ export default function Profile() {
       queryClient.invalidateQueries({ queryKey: ['preferences'] })
       queryClient.invalidateQueries({ queryKey: ['me'] })
       setEditingPrefs(false)
+    }
+  })
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: () => api.delete('/api/users/me'),
+    onSuccess: () => {
+      // Sign out and redirect to goodbye page
+      auth.removeUser()
+      navigate('/goodbye')
+    },
+    onError: (error) => {
+      console.error('Failed to delete account:', error)
+      alert('Failed to delete account. Please try again or contact support.')
     }
   })
 
@@ -340,8 +355,53 @@ export default function Profile() {
           >
             Sign Out
           </button>
+
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-red-200 rounded-lg hover:bg-red-50 text-red-600"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete Account
+          </button>
         </div>
       </div>
+
+      {/* Delete Account Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Delete Account?</h3>
+                <p className="text-sm text-slate-500">This action cannot be undone</p>
+              </div>
+            </div>
+
+            <p className="text-slate-600 mb-6">
+              All your data will be permanently deleted, including your saved jobs, applications, and preferences.
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 px-4 py-2.5 border border-slate-200 rounded-lg hover:bg-slate-50 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteAccountMutation.mutate()}
+                disabled={deleteAccountMutation.isPending}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium disabled:opacity-50"
+              >
+                {deleteAccountMutation.isPending ? 'Deleting...' : 'Delete Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

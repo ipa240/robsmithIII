@@ -1,13 +1,15 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useAuth } from 'react-oidc-context'
 import { api } from '../api/client'
 import {
-  MapPin, Filter, Building2, Briefcase, ChevronDown, X
+  MapPin, Filter, Building2, Briefcase, ChevronDown, X, Lock, Crown
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { useSubscription } from '../hooks/useSubscription'
 
 interface Facility {
   id: string
@@ -46,12 +48,13 @@ const VA_CENTER: [number, number] = [37.5, -78.8]
 const DEFAULT_ZOOM = 7
 
 // Create custom marker icons by grade
-const createMarkerIcon = (grade: string) => {
-  const color = GRADE_COLORS[grade] || '#6b7280'
+const createMarkerIcon = (grade: string, canSeeScore: boolean) => {
+  const color = canSeeScore ? (GRADE_COLORS[grade] || '#6b7280') : '#94a3b8' // Slate for free users
+  const displayText = canSeeScore ? grade : '?'
   const svgIcon = `
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32">
       <circle cx="12" cy="12" r="10" fill="${color}" stroke="white" stroke-width="2"/>
-      <text x="12" y="16" text-anchor="middle" fill="white" font-size="10" font-weight="bold" font-family="Arial">${grade}</text>
+      <text x="12" y="16" text-anchor="middle" fill="white" font-size="10" font-weight="bold" font-family="Arial">${displayText}</text>
     </svg>
   `
   return L.divIcon({
@@ -74,6 +77,10 @@ function MapController({ center, zoom }: { center: [number, number]; zoom: numbe
 
 export default function Map() {
   const navigate = useNavigate()
+  const auth = useAuth()
+  const { isPaid } = useSubscription()
+  // Only show scores if user is authenticated AND has a paid subscription
+  const canSeeAllScores = auth.isAuthenticated && isPaid
   const [selectedFacility, setSelectedFacility] = useState<Facility | null>(null)
   const [filters, setFilters] = useState({
     minGrade: 'F',
@@ -89,6 +96,16 @@ export default function Map() {
     queryKey: ['facilities-map'],
     queryFn: () => api.get('/api/facilities?limit=500').then(res => res.data),
   })
+
+  // Fetch global top 3 facilities (always visible for free users)
+  const { data: topFacilities } = useQuery({
+    queryKey: ['top-facilities'],
+    queryFn: () => api.get('/api/facilities?limit=3&min_grade=A').then(res => res.data.data || []),
+  })
+
+  const globalTop3Ids = useMemo(() => {
+    return new Set((topFacilities || []).map((f: any) => f.id))
+  }, [topFacilities])
 
   // Extract facilities array from response
   const facilities: Facility[] = useMemo(() => {
@@ -233,41 +250,56 @@ export default function Map() {
               />
               <MapController center={mapCenter} zoom={zoom} />
 
-              {filteredFacilities.map(facility => (
-                <Marker
-                  key={facility.id}
-                  position={[facility.latitude, facility.longitude]}
-                  icon={createMarkerIcon(facility.ofs_grade)}
-                  eventHandlers={{
-                    click: () => setSelectedFacility(facility),
-                  }}
-                >
-                  <Popup>
-                    <div className="min-w-[200px]">
-                      <h3 className="font-bold text-slate-900 mb-1">{facility.name}</h3>
-                      <p className="text-sm text-slate-600 mb-2">{facility.city}</p>
-                      <div className="flex items-center gap-2 mb-2">
-                        <div
-                          className="px-2 py-1 rounded text-white text-xs font-bold"
-                          style={{ backgroundColor: GRADE_COLORS[facility.ofs_grade] }}
-                        >
-                          {facility.ofs_grade}
+              {filteredFacilities.map(facility => {
+                const canSeeScore = canSeeAllScores || globalTop3Ids.has(facility.id)
+                return (
+                  <Marker
+                    key={facility.id}
+                    position={[facility.latitude, facility.longitude]}
+                    icon={createMarkerIcon(facility.ofs_grade, canSeeScore)}
+                    eventHandlers={{
+                      click: () => setSelectedFacility(facility),
+                    }}
+                  >
+                    <Popup>
+                      <div className="min-w-[200px]">
+                        <h3 className="font-bold text-slate-900 mb-1">{facility.name}</h3>
+                        <p className="text-sm text-slate-600 mb-2">{facility.city}</p>
+                        {canSeeScore ? (
+                          <div className="flex items-center gap-2 mb-2">
+                            <div
+                              className="px-2 py-1 rounded text-white text-xs font-bold"
+                              style={{ backgroundColor: GRADE_COLORS[facility.ofs_grade] }}
+                            >
+                              {facility.ofs_grade}
+                            </div>
+                            <span className="text-sm text-slate-600">Score: {facility.ofs_score}</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="px-2 py-1 rounded bg-slate-200 text-slate-400 text-xs font-bold relative">
+                              <span className="blur-[3px] select-none">A+</span>
+                            </div>
+                            <span className="text-sm text-slate-400 flex items-center gap-1">
+                              <Lock className="w-3 h-3" />
+                              Upgrade to view
+                            </span>
+                          </div>
+                        )}
+                        <div className="text-sm text-slate-600 mb-2">
+                          {facility.job_count} open positions
                         </div>
-                        <span className="text-sm text-slate-600">Score: {facility.ofs_score}</span>
+                        <button
+                          onClick={() => navigate(`/facilities/${facility.id}`)}
+                          className="w-full py-1.5 bg-primary-600 text-white rounded text-sm font-medium hover:bg-primary-700"
+                        >
+                          View Details
+                        </button>
                       </div>
-                      <div className="text-sm text-slate-600 mb-2">
-                        {facility.job_count} open positions
-                      </div>
-                      <button
-                        onClick={() => navigate(`/facilities/${facility.id}`)}
-                        className="w-full py-1.5 bg-primary-600 text-white rounded text-sm font-medium hover:bg-primary-700"
-                      >
-                        View Details
-                      </button>
-                    </div>
-                  </Popup>
-                </Marker>
-              ))}
+                    </Popup>
+                  </Marker>
+                )
+              })}
             </MapContainer>
           )}
 
@@ -299,63 +331,88 @@ export default function Map() {
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           {selectedFacility ? (
             /* Facility Detail */
-            <div className="p-4">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="font-bold text-slate-900">{selectedFacility.name}</h3>
-                  <p className="text-sm text-slate-500">{selectedFacility.city}</p>
-                </div>
-                <button
-                  onClick={() => setSelectedFacility(null)}
-                  className="p-1 hover:bg-slate-100 rounded"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+            (() => {
+              const canSeeScore = canSeeAllScores || globalTop3Ids.has(selectedFacility.id)
+              return (
+                <div className="p-4">
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <h3 className="font-bold text-slate-900">{selectedFacility.name}</h3>
+                      <p className="text-sm text-slate-500">{selectedFacility.city}</p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedFacility(null)}
+                      className="p-1 hover:bg-slate-100 rounded"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
 
-              <div className="flex items-center gap-4 mb-4">
-                <div
-                  className="w-16 h-16 rounded-xl flex items-center justify-center text-white text-2xl font-bold"
-                  style={{ backgroundColor: GRADE_COLORS[selectedFacility.ofs_grade] }}
-                >
-                  {selectedFacility.ofs_grade}
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-slate-900">{selectedFacility.ofs_score}</div>
-                  <div className="text-sm text-slate-500">OFS Score</div>
-                </div>
-              </div>
+                  <div className="flex items-center gap-4 mb-4">
+                    {canSeeScore ? (
+                      <>
+                        <div
+                          className="w-16 h-16 rounded-xl flex items-center justify-center text-white text-2xl font-bold"
+                          style={{ backgroundColor: GRADE_COLORS[selectedFacility.ofs_grade] }}
+                        >
+                          {selectedFacility.ofs_grade}
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold text-slate-900">{selectedFacility.ofs_score}</div>
+                          <div className="text-sm text-slate-500">OFS Score</div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-16 h-16 rounded-xl flex items-center justify-center bg-slate-100 relative">
+                          <span className="text-2xl font-bold text-slate-300 blur-[4px] select-none">A+</span>
+                          <Lock className="absolute w-5 h-5 text-slate-400" />
+                        </div>
+                        <div>
+                          <div className="text-sm text-slate-400 flex items-center gap-1">
+                            <Crown className="w-4 h-4" />
+                            Upgrade to view scores
+                          </div>
+                          <Link to="/billing" className="text-xs text-primary-600 hover:underline">
+                            See plans
+                          </Link>
+                        </div>
+                      </>
+                    )}
+                  </div>
 
-              <div className="space-y-3 mb-4">
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <Building2 className="w-4 h-4 text-slate-400" />
-                  {selectedFacility.health_system || 'Independent'}
-                </div>
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <MapPin className="w-4 h-4 text-slate-400" />
-                  {selectedFacility.address || selectedFacility.city}
-                </div>
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <Briefcase className="w-4 h-4 text-slate-400" />
-                  {selectedFacility.job_count} open positions
-                </div>
-              </div>
+                  <div className="space-y-3 mb-4">
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                      <Building2 className="w-4 h-4 text-slate-400" />
+                      {selectedFacility.health_system || 'Independent'}
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                      <MapPin className="w-4 h-4 text-slate-400" />
+                      {selectedFacility.address || selectedFacility.city}
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                      <Briefcase className="w-4 h-4 text-slate-400" />
+                      {selectedFacility.job_count} open positions
+                    </div>
+                  </div>
 
-              <div className="flex gap-2">
-                <button
-                  onClick={() => navigate(`/facilities/${selectedFacility.id}`)}
-                  className="flex-1 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700"
-                >
-                  View Details
-                </button>
-                <button
-                  onClick={() => navigate(`/facilities/${selectedFacility.id}#jobs`)}
-                  className="flex-1 py-2 border border-slate-300 rounded-lg font-medium hover:bg-slate-50"
-                >
-                  View Jobs
-                </button>
-              </div>
-            </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => navigate(`/facilities/${selectedFacility.id}`)}
+                      className="flex-1 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700"
+                    >
+                      View Details
+                    </button>
+                    <button
+                      onClick={() => navigate(`/facilities/${selectedFacility.id}#jobs`)}
+                      className="flex-1 py-2 border border-slate-300 rounded-lg font-medium hover:bg-slate-50"
+                    >
+                      View Jobs
+                    </button>
+                  </div>
+                </div>
+              )
+            })()
           ) : (
             /* Facility List */
             <div>
@@ -369,34 +426,44 @@ export default function Map() {
                     {isLoading ? 'Loading facilities...' : 'No facilities match your filters'}
                   </div>
                 ) : (
-                  filteredFacilities.map(facility => (
-                    <button
-                      key={facility.id}
-                      onClick={() => {
-                        setSelectedFacility(facility)
-                        setMapCenter([facility.latitude, facility.longitude])
-                        setZoom(12)
-                      }}
-                      className="w-full p-4 text-left border-b border-slate-100 hover:bg-slate-50 transition-colors"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div
-                          className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-                          style={{ backgroundColor: GRADE_COLORS[facility.ofs_grade] }}
-                        >
-                          {facility.ofs_grade}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-slate-900 truncate">{facility.name}</div>
-                          <div className="text-sm text-slate-500">{facility.city}</div>
-                          <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
-                            <span>{facility.job_count} jobs</span>
-                            {facility.beds > 0 && <span>{facility.beds} beds</span>}
+                  filteredFacilities.map(facility => {
+                    const canSeeScore = canSeeAllScores || globalTop3Ids.has(facility.id)
+                    return (
+                      <button
+                        key={facility.id}
+                        onClick={() => {
+                          setSelectedFacility(facility)
+                          setMapCenter([facility.latitude, facility.longitude])
+                          setZoom(12)
+                        }}
+                        className="w-full p-4 text-left border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                      >
+                        <div className="flex items-start gap-3">
+                          {canSeeScore ? (
+                            <div
+                              className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+                              style={{ backgroundColor: GRADE_COLORS[facility.ofs_grade] }}
+                            >
+                              {facility.ofs_grade}
+                            </div>
+                          ) : (
+                            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-slate-100 text-slate-300 text-sm font-bold flex-shrink-0 relative">
+                              <span className="blur-[3px] select-none">A+</span>
+                              <Lock className="absolute w-3 h-3 text-slate-400" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-slate-900 truncate">{facility.name}</div>
+                            <div className="text-sm text-slate-500">{facility.city}</div>
+                            <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
+                              <span>{facility.job_count} jobs</span>
+                              {facility.beds > 0 && <span>{facility.beds} beds</span>}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </button>
-                  ))
+                      </button>
+                    )
+                  })
                 )}
               </div>
             </div>

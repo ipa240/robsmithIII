@@ -3,13 +3,18 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
   Briefcase, Building2, Bookmark, DollarSign, ArrowRight,
-  MessageSquare, Newspaper, FileCheck, Clock, Send
+  MessageSquare, Newspaper, FileCheck, Clock, Send, Lock, Crown
 } from 'lucide-react'
 import { api, setAuthToken } from '../api/client'
 import { useEffect, useState } from 'react'
+import { useSubscription } from '../hooks/useSubscription'
+import BlurOverlay from '../components/BlurOverlay'
 
 export default function Dashboard() {
   const auth = useAuth()
+  const { isPaid } = useSubscription()
+  // Only show premium content if authenticated AND paid
+  const canSeePremiumContent = auth.isAuthenticated && isPaid
   const [sullyMessage, setSullyMessage] = useState('')
 
   // Set auth token for API calls
@@ -176,84 +181,135 @@ export default function Dashboard() {
       )}
 
       {/* Recent Jobs */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-slate-900">Recent Jobs</h2>
-          <Link to="/jobs" className="text-primary-600 hover:underline text-sm flex items-center gap-1">
-            View all
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
-        <div className="space-y-3">
-          {recentJobs?.map((job: any) => (
-            <Link
-              key={job.id}
-              to={`/jobs/${job.id}`}
-              className="block p-4 rounded-lg border border-slate-100 hover:border-primary-200 hover:bg-primary-50/50 transition-colors"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-medium text-slate-900">{job.title}</h3>
-                  <div className="text-sm text-slate-500">
-                    {job.facility_name || 'Various Facilities'} • {job.city}, {job.state}
+      {canSeePremiumContent ? (
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-slate-900">Recent Jobs</h2>
+            <Link to="/jobs" className="text-primary-600 hover:underline text-sm flex items-center gap-1">
+              View all
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+          <div className="space-y-3">
+            {recentJobs?.map((job: any) => (
+              <Link
+                key={job.id}
+                to={`/jobs/${job.id}`}
+                className="block p-4 rounded-lg border border-slate-100 hover:border-primary-200 hover:bg-primary-50/50 transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-medium text-slate-900">{job.title}</h3>
+                    <div className="text-sm text-slate-500">
+                      {job.facility_name || 'Various Facilities'} • {job.city}, {job.state}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {job.nursing_type && (
+                      <span className="px-2 py-1 bg-primary-50 text-primary-700 text-xs rounded-full">
+                        {job.nursing_type}
+                      </span>
+                    )}
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  {job.nursing_type && (
-                    <span className="px-2 py-1 bg-primary-50 text-primary-700 text-xs rounded-full">
-                      {job.nursing_type}
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <BlurOverlay
+          title="Recent Nursing Opportunities"
+          description="Upgrade to see personalized job recommendations and recent postings."
+          showPricing
+          demoKey="dashboard"
+          showDemo
+        >
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-slate-900">Recent Jobs</h2>
+            </div>
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="p-4 rounded-lg border border-slate-100">
+                  <div className="h-5 w-48 bg-slate-200 rounded mb-2" />
+                  <div className="h-4 w-32 bg-slate-100 rounded" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </BlurOverlay>
+      )}
+
+      {/* Top Facilities */}
+      {canSeePremiumContent ? (
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-slate-900">Top Rated Facilities</h2>
+            <Link to="/facilities" className="text-primary-600 hover:underline text-sm flex items-center gap-1">
+              View all
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+          <div className="space-y-3">
+            {topFacilities?.map((facility: any) => (
+              <Link
+                key={facility.id}
+                to={`/facilities/${facility.id}`}
+                className="block p-4 rounded-lg border border-slate-100 hover:border-primary-200 hover:bg-primary-50/50 transition-colors"
+              >
+                <div className="flex items-center gap-4">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold ${
+                    facility.score?.ofs_grade === 'A' || facility.ofs_grade === 'A' ? 'bg-emerald-500' :
+                    facility.score?.ofs_grade === 'B' || facility.ofs_grade === 'B' ? 'bg-blue-500' :
+                    facility.score?.ofs_grade === 'C' || facility.ofs_grade === 'C' ? 'bg-amber-500' :
+                    facility.score?.ofs_grade === 'D' || facility.ofs_grade === 'D' ? 'bg-orange-500' :
+                    facility.score?.ofs_grade === 'F' || facility.ofs_grade === 'F' ? 'bg-red-500' :
+                    'bg-slate-400'
+                  }`}>
+                    {facility.score?.ofs_grade || facility.ofs_grade || '-'}
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-medium text-slate-900">{facility.name}</h3>
+                    <div className="text-sm text-slate-500">
+                      {facility.system_name || facility.city}, {facility.state}
+                    </div>
+                  </div>
+                  {facility.job_count > 0 && (
+                    <span className="text-sm text-emerald-600">
+                      {facility.job_count} jobs
                     </span>
                   )}
                 </div>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            ))}
+          </div>
         </div>
-      </div>
-
-      {/* Top Facilities */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-slate-900">Top Rated Facilities</h2>
-          <Link to="/facilities" className="text-primary-600 hover:underline text-sm flex items-center gap-1">
-            View all
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
-        <div className="space-y-3">
-          {topFacilities?.map((facility: any) => (
-            <Link
-              key={facility.id}
-              to={`/facilities/${facility.id}`}
-              className="block p-4 rounded-lg border border-slate-100 hover:border-primary-200 hover:bg-primary-50/50 transition-colors"
-            >
-              <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold ${
-                  facility.score?.ofs_grade === 'A' || facility.ofs_grade === 'A' ? 'bg-emerald-500' :
-                  facility.score?.ofs_grade === 'B' || facility.ofs_grade === 'B' ? 'bg-blue-500' :
-                  facility.score?.ofs_grade === 'C' || facility.ofs_grade === 'C' ? 'bg-amber-500' :
-                  facility.score?.ofs_grade === 'D' || facility.ofs_grade === 'D' ? 'bg-orange-500' :
-                  facility.score?.ofs_grade === 'F' || facility.ofs_grade === 'F' ? 'bg-red-500' :
-                  'bg-slate-400'
-                }`}>
-                  {facility.score?.ofs_grade || facility.ofs_grade || '-'}
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-medium text-slate-900">{facility.name}</h3>
-                  <div className="text-sm text-slate-500">
-                    {facility.system_name || facility.city}, {facility.state}
+      ) : (
+        <BlurOverlay
+          title="Top Rated Facilities"
+          description="Upgrade to see facility rankings, OFS scores, and detailed metrics."
+          showPricing
+          demoKey="dashboard"
+          showDemo
+        >
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-slate-900">Top Rated Facilities</h2>
+            </div>
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="p-4 rounded-lg border border-slate-100 flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-lg bg-slate-200" />
+                  <div className="flex-1">
+                    <div className="h-5 w-40 bg-slate-200 rounded mb-1" />
+                    <div className="h-4 w-24 bg-slate-100 rounded" />
                   </div>
                 </div>
-                {facility.job_count > 0 && (
-                  <span className="text-sm text-emerald-600">
-                    {facility.job_count} jobs
-                  </span>
-                )}
-              </div>
-            </Link>
-          ))}
-        </div>
-      </div>
+              ))}
+            </div>
+          </div>
+        </BlurOverlay>
+      )}
 
       {/* Two Column Bottom Section */}
       <div className="grid lg:grid-cols-2 gap-6">

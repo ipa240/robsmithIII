@@ -498,3 +498,72 @@ async def unsave_job(
     db.commit()
 
     return {"success": True, "message": "Job removed"}
+
+
+@router.delete("/users/me")
+async def delete_account(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+):
+    """Delete user account and all associated data.
+
+    This permanently deletes:
+    - User profile
+    - Saved jobs
+    - Applications
+    - Preferences
+    - All other user data
+
+    This action cannot be undone.
+    """
+    user = get_or_create_user(db, current_user)
+    user_id = user["id"]
+
+    try:
+        # Delete all related data first (foreign key constraints)
+        # Saved jobs
+        db.execute(
+            text("DELETE FROM saved_jobs WHERE user_id = :user_id"),
+            {"user_id": user_id}
+        )
+
+        # Applications
+        db.execute(
+            text("DELETE FROM applications WHERE user_id = :user_id"),
+            {"user_id": user_id}
+        )
+
+        # Job alerts
+        db.execute(
+            text("DELETE FROM job_alerts WHERE user_id = :user_id"),
+            {"user_id": user_id}
+        )
+
+        # Notifications
+        db.execute(
+            text("DELETE FROM notifications WHERE user_id = :user_id"),
+            {"user_id": user_id}
+        )
+
+        # Community posts
+        db.execute(
+            text("DELETE FROM community_posts WHERE user_id = :user_id"),
+            {"user_id": user_id}
+        )
+
+        # Finally delete the user
+        db.execute(
+            text("DELETE FROM users WHERE id = :user_id"),
+            {"user_id": user_id}
+        )
+
+        db.commit()
+
+        return {"success": True, "message": "Account deleted successfully"}
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete account: {str(e)}"
+        )

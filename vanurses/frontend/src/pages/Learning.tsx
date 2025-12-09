@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useAuth } from 'react-oidc-context'
 import { api } from '../api/client'
 import {
   GraduationCap, BookOpen, Plus, X,
   ChevronRight, Star,
   CheckCircle, AlertCircle, ExternalLink
 } from 'lucide-react'
+import { useSubscription } from '../hooks/useSubscription'
+import BlurOverlay from '../components/BlurOverlay'
 
 interface CEULog {
   id: string
@@ -42,6 +45,10 @@ const RESOURCES: Resource[] = [
 ]
 
 export default function Learning() {
+  const auth = useAuth()
+  const { isPaid } = useSubscription()
+  // Only show content if authenticated AND paid
+  const canAccessFeature = auth.isAuthenticated && isPaid
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'ceu' | 'resources'>('ceu')
   const [showAddCEU, setShowAddCEU] = useState(false)
@@ -52,6 +59,44 @@ export default function Learning() {
     category: '',
     completion_date: ''
   })
+
+  // If user is not paid, show blur overlay
+  if (!canAccessFeature) {
+    return (
+      <BlurOverlay
+        title="CEU Learning Center"
+        description="Track your continuing education, access resources, and maintain your nursing credentials. Upgrade to access this premium feature."
+        showDemo
+        demoKey="learning"
+        showPricing
+      >
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="h-8 w-48 bg-slate-200 rounded mb-2" />
+              <div className="h-5 w-64 bg-slate-100 rounded" />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="flex gap-4 mb-6">
+              <div className="h-10 w-32 bg-slate-100 rounded" />
+              <div className="h-10 w-32 bg-slate-100 rounded" />
+            </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="p-4 rounded-lg border border-slate-200">
+                  <div className="h-6 w-40 bg-slate-200 rounded mb-2" />
+                  <div className="h-4 w-24 bg-slate-100 rounded mb-4" />
+                  <div className="h-3 w-full bg-slate-100 rounded" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </BlurOverlay>
+    )
+  }
 
   const { data: ceuLogs = [] } = useQuery<CEULog[]>({
     queryKey: ['ceu-logs'],

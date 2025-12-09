@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useAuth } from 'react-oidc-context'
 import { api } from '../api/client'
 import { Link } from 'react-router-dom'
 import {
@@ -7,6 +8,8 @@ import {
   List, Grid3X3, Plus, MessageSquare, Trash2, Edit2, X, Check,
   Send, Phone, FileText, MapPin, DollarSign
 } from 'lucide-react'
+import { useSubscription } from '../hooks/useSubscription'
+import BlurOverlay from '../components/BlurOverlay'
 
 interface Application {
   id: string
@@ -43,11 +46,57 @@ const STATUS_CONFIG = {
 const KANBAN_COLUMNS = ['clicked', 'applied', 'screening', 'interviewing', 'offer'] as const
 
 export default function Applications() {
+  const auth = useAuth()
+  const { isPaid } = useSubscription()
+  // Only show content if authenticated AND paid
+  const canAccessFeature = auth.isAuthenticated && isPaid
   const queryClient = useQueryClient()
   const [view, setView] = useState<'kanban' | 'list'>('kanban')
   const [selectedApp, setSelectedApp] = useState<Application | null>(null)
   const [showAddNote, setShowAddNote] = useState(false)
   const [newNote, setNewNote] = useState('')
+
+  // If user is not paid, show blur overlay
+  if (!canAccessFeature) {
+    return (
+      <BlurOverlay
+        title="Application Tracker"
+        description="Track your job applications from click to offer. Upgrade to access this premium feature."
+        showDemo
+        demoKey="applications"
+        showPricing
+      >
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="h-8 w-48 bg-slate-200 rounded mb-2" />
+              <div className="h-5 w-64 bg-slate-100 rounded" />
+            </div>
+            <div className="flex gap-2">
+              <div className="h-10 w-24 bg-slate-100 rounded" />
+              <div className="h-10 w-24 bg-slate-100 rounded" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-5 gap-4">
+            {['Clicked', 'Applied', 'Screening', 'Interviewing', 'Offer'].map((status) => (
+              <div key={status} className="bg-slate-50 rounded-xl p-3">
+                <div className="h-6 w-20 bg-slate-200 rounded mb-3" />
+                <div className="space-y-3">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="bg-white rounded-lg p-4 border border-slate-200">
+                      <div className="h-5 w-32 bg-slate-200 rounded mb-2" />
+                      <div className="h-4 w-24 bg-slate-100 rounded" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </BlurOverlay>
+    )
+  }
   const [editingNextStep, setEditingNextStep] = useState(false)
   const [nextStepData, setNextStepData] = useState({ step: '', date: '' })
 
