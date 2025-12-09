@@ -87,7 +87,7 @@ def build_score_object(row_dict: dict) -> Optional[dict]:
 @router.get("")
 async def list_facilities(
     db: Session = Depends(get_db),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=500),  # Increased for map view
     offset: int = Query(0, ge=0),
     search: Optional[str] = None,
     region: Optional[str] = None,
