@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import {
-  GraduationCap, BookOpen, Award, DollarSign, Plus, X,
-  ChevronRight, Star, TrendingUp,
-  CheckCircle, AlertCircle, ExternalLink, Loader2
+  GraduationCap, BookOpen, Plus, X,
+  ChevronRight, Star,
+  CheckCircle, AlertCircle, ExternalLink
 } from 'lucide-react'
 
 interface CEULog {
@@ -27,14 +27,6 @@ interface Resource {
   reads: number
 }
 
-interface SalaryData {
-  specialty: string
-  avgHourly: number | null
-  minHourly: number | null
-  maxHourly: number | null
-  jobs: number
-}
-
 const CEU_CATEGORIES = [
   'Pharmacology', 'Patient Safety', 'Ethics', 'Clinical Skills',
   'Leadership', 'Infection Control', 'Pain Management', 'Other'
@@ -51,7 +43,7 @@ const RESOURCES: Resource[] = [
 
 export default function Learning() {
   const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState<'ceu' | 'resources' | 'salary'>('ceu')
+  const [activeTab, setActiveTab] = useState<'ceu' | 'resources'>('ceu')
   const [showAddCEU, setShowAddCEU] = useState(false)
   const [newCEU, setNewCEU] = useState({
     title: '',
@@ -64,11 +56,6 @@ export default function Learning() {
   const { data: ceuLogs = [] } = useQuery<CEULog[]>({
     queryKey: ['ceu-logs'],
     queryFn: () => api.get('/api/learning/ceus').then(res => res.data)
-  })
-
-  const { data: salaryData = [], isLoading: salaryLoading } = useQuery<SalaryData[]>({
-    queryKey: ['salary-data'],
-    queryFn: () => api.get('/api/trends/pay').then(res => res.data)
   })
 
   const addCEU = useMutation({
@@ -90,7 +77,7 @@ export default function Learning() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Learning Hub</h1>
-          <p className="text-slate-600">CEU tracking, resources, and salary data</p>
+          <p className="text-slate-600">CEU tracking and career resources</p>
         </div>
       </div>
 
@@ -120,19 +107,6 @@ export default function Learning() {
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4" />
             Resources
-          </div>
-        </button>
-        <button
-          onClick={() => setActiveTab('salary')}
-          className={`px-6 py-3 text-sm font-medium border-b-2 -mb-px ${
-            activeTab === 'salary'
-              ? 'border-primary-600 text-primary-600'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <DollarSign className="w-4 h-4" />
-            Salary Data
           </div>
         </button>
       </div>
@@ -236,28 +210,28 @@ export default function Learning() {
             <div className="grid md:grid-cols-2 gap-4">
               {[
                 {
-                  title: 'Pharmacology Update 2025',
-                  hours: 3,
-                  provider: 'Nurse.com',
-                  url: 'https://www.nurse.com/ce/free-nursing-ceus'
+                  title: 'Free Nursing CE Courses',
+                  hours: 30,
+                  provider: 'NursingCE.com',
+                  url: 'https://www.nursingce.com/'
                 },
                 {
-                  title: 'Patient Safety Essentials',
+                  title: 'Free CEU Courses',
                   hours: 2,
-                  provider: 'Medscape',
-                  url: 'https://www.medscape.org/nursing'
+                  provider: 'Wild Iris Medical',
+                  url: 'https://wildirismedicaleducation.com/nursing-ceu/free-nursing-ceus'
                 },
                 {
-                  title: 'Ethics in Nursing Practice',
-                  hours: 4,
+                  title: 'Virginia Nursing CEUs',
+                  hours: 30,
                   provider: 'NurseCE4Less',
-                  url: 'https://www.nursece4less.com/free-nursing-ceus'
+                  url: 'https://nursece4less.com/nursing-ceus/virginia-nursing-ceu-courses/'
                 },
                 {
-                  title: 'Infection Control Guidelines',
-                  hours: 2,
-                  provider: 'CDC',
-                  url: 'https://www.cdc.gov/infectioncontrol/training/index.html'
+                  title: 'Substance Misuse Training (8hr Free)',
+                  hours: 8,
+                  provider: 'UVA School of Nursing',
+                  url: 'https://nursing.virginia.edu/sonce/'
                 },
               ].map((course, i) => (
                 <div key={i} className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-md transition-shadow">
@@ -330,119 +304,6 @@ export default function Learning() {
               </a>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Salary Data Tab */}
-      {activeTab === 'salary' && (
-        <div className="space-y-6">
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <p className="text-sm text-slate-500">
-              Virginia nursing salary data aggregated from active job postings. Data reflects current market rates.
-            </p>
-          </div>
-
-          {salaryLoading ? (
-            <div className="bg-white rounded-xl border border-slate-200 p-12 flex justify-center">
-              <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
-            </div>
-          ) : salaryData.length === 0 ? (
-            <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-              <DollarSign className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-500">No salary data available yet</p>
-            </div>
-          ) : (
-            <>
-              {/* Salary Table */}
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Specialty</th>
-                      <th className="text-right px-6 py-3 text-xs font-medium text-slate-500 uppercase">Avg Hourly</th>
-                      <th className="text-right px-6 py-3 text-xs font-medium text-slate-500 uppercase">Range</th>
-                      <th className="text-right px-6 py-3 text-xs font-medium text-slate-500 uppercase">Jobs</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {salaryData.map(data => (
-                      <tr key={data.specialty} className="hover:bg-slate-50">
-                        <td className="px-6 py-4 font-medium text-slate-900">{data.specialty}</td>
-                        <td className="px-6 py-4 text-right text-slate-900 font-semibold">
-                          {data.avgHourly ? `$${data.avgHourly.toFixed(2)}` : '-'}
-                        </td>
-                        <td className="px-6 py-4 text-right text-slate-600">
-                          {data.minHourly && data.maxHourly
-                            ? `$${data.minHourly.toFixed(0)} - $${data.maxHourly.toFixed(0)}`
-                            : '-'}
-                        </td>
-                        <td className="px-6 py-4 text-right text-slate-600">
-                          {data.jobs}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Salary Insights - Dynamic */}
-              <div className="grid md:grid-cols-3 gap-4">
-                {(() => {
-                  const sorted = [...salaryData].filter(d => d.avgHourly !== null)
-                  const highest = sorted.sort((a, b) => (b.avgHourly || 0) - (a.avgHourly || 0))[0]
-                  const mostJobs = [...salaryData].sort((a, b) => b.jobs - a.jobs)[0]
-                  const avgAll = sorted.length > 0
-                    ? sorted.reduce((sum, d) => sum + (d.avgHourly || 0), 0) / sorted.length
-                    : 0
-
-                  return (
-                    <>
-                      <div className="bg-white rounded-xl border border-slate-200 p-4">
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                            <TrendingUp className="w-5 h-5 text-green-600" />
-                          </div>
-                          <div>
-                            <p className="text-sm text-slate-500">Highest Paying</p>
-                            <p className="font-bold text-slate-900">{highest?.specialty || 'N/A'}</p>
-                          </div>
-                        </div>
-                        <p className="text-2xl font-bold text-green-600">
-                          {highest?.avgHourly ? `$${highest.avgHourly.toFixed(0)}/hr avg` : 'N/A'}
-                        </p>
-                      </div>
-                      <div className="bg-white rounded-xl border border-slate-200 p-4">
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                            <Award className="w-5 h-5 text-blue-600" />
-                          </div>
-                          <div>
-                            <p className="text-sm text-slate-500">Most In-Demand</p>
-                            <p className="font-bold text-slate-900">{mostJobs?.specialty || 'N/A'}</p>
-                          </div>
-                        </div>
-                        <p className="text-2xl font-bold text-blue-600">{mostJobs?.jobs || 0} jobs</p>
-                      </div>
-                      <div className="bg-white rounded-xl border border-slate-200 p-4">
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                            <DollarSign className="w-5 h-5 text-purple-600" />
-                          </div>
-                          <div>
-                            <p className="text-sm text-slate-500">Virginia Average</p>
-                            <p className="font-bold text-slate-900">All Specialties</p>
-                          </div>
-                        </div>
-                        <p className="text-2xl font-bold text-purple-600">
-                          {avgAll > 0 ? `$${avgAll.toFixed(2)}/hr` : 'N/A'}
-                        </p>
-                      </div>
-                    </>
-                  )
-                })()}
-              </div>
-            </>
-          )}
         </div>
       )}
 

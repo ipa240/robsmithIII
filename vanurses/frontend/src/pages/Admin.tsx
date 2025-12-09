@@ -76,6 +76,31 @@ export default function Admin() {
   const [userSearch, setUserSearch] = useState('')
   const queryClient = useQueryClient()
 
+  // Check if user is admin
+  const { data: userData, isLoading: userLoading } = useQuery({
+    queryKey: ['me'],
+    queryFn: () => api.get('/api/me').then(res => res.data.data)
+  })
+
+  // Block non-admins
+  if (userLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+      </div>
+    )
+  }
+
+  if (!userData?.is_admin) {
+    return (
+      <div className="text-center py-20">
+        <Shield className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+        <h2 className="text-2xl font-bold text-slate-900 mb-2">Access Denied</h2>
+        <p className="text-slate-600">Admin access required.</p>
+      </div>
+    )
+  }
+
   const { data: stats } = useQuery<AdminStats>({
     queryKey: ['admin-stats'],
     queryFn: () => api.get('/api/admin/stats').then(res => res.data)

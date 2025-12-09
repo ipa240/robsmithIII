@@ -136,7 +136,7 @@ export default function FacilityDetail() {
           {facility.score && (
             <div className={`w-20 h-20 rounded-xl flex flex-col items-center justify-center text-white ${getGradeColor(facility.score.ofs_grade)}`}>
               <span className="text-3xl font-bold">{facility.score.ofs_grade}</span>
-              <span className="text-sm opacity-80">{Math.round(facility.score.ofs_score)}</span>
+              <span className="text-sm opacity-80">{facility.score.ofs_score ? Math.round(facility.score.ofs_score) : '-'}</span>
             </div>
           )}
 
