@@ -230,7 +230,132 @@ WHERE scraped_at < NOW() - INTERVAL '30 days';
 
 **URL:** github.com/ipa240/AIGeneratorDiscord-and-Bot
 **Branch:** main
-**Latest Commit:** `fe06680` - Add community category suggestions with admin approval workflow
+**Latest Commit:** `dae7dfb` - Replace all mock data with PostgreSQL database integration
+
+---
+
+## Database Tables (User Data - Dec 2025)
+
+The following tables store user-specific data that persists across sessions:
+
+### `user_ceus` - CEU/Continuing Education Logs
+```sql
+CREATE TABLE user_ceus (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    provider VARCHAR(255),
+    hours DECIMAL(5,2) NOT NULL,
+    category VARCHAR(100),
+    completion_date DATE,
+    certificate_url VARCHAR(500),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### `user_applications` - Job Application Tracker
+```sql
+CREATE TABLE user_applications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    job_id UUID REFERENCES jobs(id) ON DELETE SET NULL,
+    status VARCHAR(50) DEFAULT 'applied',  -- clicked, applied, screening, interviewing, offer, accepted, rejected, withdrawn
+    applied_at TIMESTAMPTZ DEFAULT NOW(),
+    notes TEXT,
+    follow_up_date DATE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### `support_tickets` - Help Desk System
+```sql
+CREATE TABLE support_tickets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id),
+    user_email VARCHAR(255) NOT NULL,
+    subject VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    status VARCHAR(50) DEFAULT 'open',  -- open, in_progress, resolved, closed
+    priority VARCHAR(20) DEFAULT 'normal',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE ticket_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ticket_id UUID REFERENCES support_tickets(id) ON DELETE CASCADE,
+    sender_type VARCHAR(20) NOT NULL,  -- 'user' or 'support'
+    message TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### `learning_resources` - CEU Resources Library
+```sql
+CREATE TABLE learning_resources (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    url VARCHAR(500),
+    category VARCHAR(100),
+    provider VARCHAR(255),
+    is_free BOOLEAN DEFAULT TRUE,
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### `scraper_runs` - Job Scraper Status Tracking
+```sql
+CREATE TABLE scraper_runs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    started_at TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ,
+    status VARCHAR(50) DEFAULT 'running',  -- running, completed, failed
+    jobs_found INTEGER DEFAULT 0,
+    errors TEXT
+);
+```
+
+---
+
+## API Router Updates (Dec 8, 2025)
+
+All mock/in-memory data has been replaced with PostgreSQL database queries:
+
+| Router | Previous State | New State |
+|--------|----------------|-----------|
+| `learning.py` | In-memory `ceu_db = {}` | Queries `user_ceus` table |
+| `applications.py` | In-memory `applications_db = {}` | Queries `user_applications` table |
+| `admin.py` | Hardcoded mock stats | Real queries to users, jobs, facilities |
+| `hr.py` | Mock HR data | Queries jobs, facilities, applications by facility |
+| `support.py` | In-memory tickets | Queries `support_tickets` + `ticket_messages` |
+| `news.py` | Sample article fallback | Returns empty if no DB articles |
+
+---
+
+## Frontend Updates (Dec 8, 2025)
+
+### Onboarding.tsx
+- Removed LVN and APRN from license type options (now: RN, LPN, CNA, NP, CRNA, CNM, CNS)
+- Shows ALL tier features (removed "+N more" truncation)
+- Fixed Sully chat limit text: "3 Sully AI chats/day" (was "5/month")
+
+### Dashboard.tsx
+- Stats cards are now clickable links:
+  - Active Jobs → `/jobs`
+  - Facilities → `/facilities`
+  - Saved Jobs → `/saved`
+  - Avg Hourly → `/trends`
+- Facility grade icons show colored backgrounds (A=green, B=blue, C=amber, D=orange, F=red)
+- Added "Personalized Matches" CTA for paid users, upgrade prompt for free users
+
+### Applications.tsx
+- Fixed drag & drop glitch with optimistic updates
+- Added visual feedback during drag (opacity, ring highlight)
+- Added error toast with automatic dismissal
+- Drop target columns highlight when dragging over
 
 ---
 
@@ -238,6 +363,11 @@ WHERE scraped_at < NOW() - INTERVAL '30 days';
 
 | Date | Change |
 |------|--------|
+| 2025-12-08 | **MAJOR:** Replaced ALL mock data with PostgreSQL database integration |
+| 2025-12-08 | Created 6 new database tables for user data persistence |
+| 2025-12-08 | Fixed drag & drop in Applications with optimistic updates |
+| 2025-12-08 | Fixed Onboarding: removed LVN/APRN, show all features, fixed Sully limit |
+| 2025-12-08 | Fixed Dashboard: clickable stats, facility grades, Match Results CTA |
 | 2025-12-08 | Added community category approval workflow |
 | 2025-12-08 | Added Admin Dashboard Community tab |
 | 2025-12-08 | Backed up full API and frontend to GitHub |
