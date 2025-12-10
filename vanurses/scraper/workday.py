@@ -34,6 +34,9 @@ class WorkdayScraper:
         self.base_url = self.config['base_url']
         self.api_path = self.config['api_path']
         self.system_name = self.config['name']
+        # Extract site name from api_path (segment 4)
+        # e.g., /wday/cxs/sentara/SCS/jobs -> SCS
+        self.site_name = self.api_path.split('/')[4]
 
         self.session = requests.Session()
         self.session.headers.update({
@@ -124,9 +127,10 @@ class WorkdayScraper:
             title = job_data.get('title', '')
             external_id = job_data.get('bulletFields', [None])[0] if job_data.get('bulletFields') else None
 
-            # Get job URL
+            # Get job URL - include site name for correct Workday URLs
+            # e.g., https://sentara.wd1.myworkdayjobs.com/SCS/job/location/title/ID
             external_path = job_data.get('externalPath', '')
-            job_url = f"{self.base_url}{external_path}" if external_path else None
+            job_url = f"{self.base_url}/{self.site_name}{external_path}" if external_path else None
 
             # Classify the job
             classification = classify_job(title)

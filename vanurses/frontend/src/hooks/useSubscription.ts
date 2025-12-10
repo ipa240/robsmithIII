@@ -4,8 +4,49 @@ import { api } from '../api/client'
 // DEV MODE: Set to true to bypass all premium restrictions for testing
 const DEV_MODE = false
 
+// Admin unlock - SHA-256 hash of the unlock code (code itself is NOT stored)
+const ADMIN_UNLOCK_HASH = 'c2a4f65f950a4de599fd1c105e051b8c1e96bfdf204d6f4f8fd0df8716a219df'
+const ADMIN_UNLOCK_STORAGE_KEY = 'vanurses_admin_unlock'
+
+// Check if admin is unlocked (synchronous check for initial render)
+function isAdminUnlockedSync(): boolean {
+  if (typeof window === 'undefined') return false
+  return localStorage.getItem(ADMIN_UNLOCK_STORAGE_KEY) === 'true'
+}
+
+// Hash function using SubtleCrypto
+async function hashCode(code: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(code)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+// Export unlock function for use in UI
+export async function unlockAdmin(code: string): Promise<boolean> {
+  const hash = await hashCode(code)
+  if (hash === ADMIN_UNLOCK_HASH) {
+    localStorage.setItem(ADMIN_UNLOCK_STORAGE_KEY, 'true')
+    window.location.reload()
+    return true
+  }
+  return false
+}
+
+// Export lock function
+export function lockAdmin(): void {
+  localStorage.removeItem(ADMIN_UNLOCK_STORAGE_KEY)
+  window.location.reload()
+}
+
+// Export check function
+export function isAdminUnlocked(): boolean {
+  return isAdminUnlockedSync()
+}
+
 interface SubscriptionStatus {
-  tier: 'free' | 'starter' | 'pro' | 'premium' | 'hr_admin'
+  tier: 'free' | 'facilities' | 'starter' | 'pro' | 'premium' | 'hr_admin'
   tier_name: string
   is_active: boolean
   expires_at: string | null
@@ -36,6 +77,20 @@ const TIER_FEATURES = {
     priority_alerts: false,
     personalized_results: false,
     resume_builder: false,
+    job_access: true,
+  },
+  facilities: {
+    full_indices: true,  // Full access to facility scores
+    facility_compare: 3,
+    sully_daily: 3,
+    sully_nofilter: 0,
+    pdf_export: false,
+    custom_weights: false,
+    trend_analytics: false,
+    priority_alerts: false,
+    personalized_results: false,
+    resume_builder: false,
+    job_access: false,  // No job detail access
   },
   starter: {
     full_indices: true,
@@ -48,6 +103,7 @@ const TIER_FEATURES = {
     priority_alerts: true,
     personalized_results: false,
     resume_builder: false,
+    job_access: true,
   },
   pro: {
     full_indices: true,
@@ -60,6 +116,7 @@ const TIER_FEATURES = {
     priority_alerts: true,
     personalized_results: true,
     resume_builder: false,
+    job_access: true,
   },
   premium: {
     full_indices: true,
@@ -72,6 +129,7 @@ const TIER_FEATURES = {
     priority_alerts: true,
     personalized_results: true,
     resume_builder: true,
+    job_access: true,
   },
   hr_admin: {
     full_indices: true,
@@ -84,20 +142,23 @@ const TIER_FEATURES = {
     priority_alerts: true,
     personalized_results: true,
     resume_builder: true,
+    job_access: true,
   },
 }
 
 export function useSubscription() {
+  const adminUnlocked = isAdminUnlockedSync()
+
   const { data, isLoading, refetch } = useQuery<SubscriptionStatus>({
     queryKey: ['subscription-status'],
     queryFn: () => api.get('/api/billing/status').then(res => res.data),
     staleTime: 60000, // Cache for 1 minute
-    enabled: !DEV_MODE,
+    enabled: !DEV_MODE && !adminUnlocked,
     retry: 1,
   })
 
-  // In DEV_MODE, always return hr_admin with full access
-  if (DEV_MODE) {
+  // In DEV_MODE or Admin Unlocked, always return hr_admin with full access
+  if (DEV_MODE || adminUnlocked) {
     return {
       tier: 'hr_admin' as const,
       tierName: 'HR/Admin',
@@ -121,12 +182,14 @@ export function useSubscription() {
       canAccessResumeBuilder: true,
       canExportPdf: true,
       isPaid: true,
+      isFacilities: false,
       isStarter: false,
       isPro: false,
       isPremium: true,
       isHrAdmin: true,
       isProOrAbove: true,
       isPremiumOrAbove: true,
+      canAccessJobs: true,
       refetch,
     }
   }
@@ -191,12 +254,16 @@ export function useSubscription() {
 
     // Tier checks
     isPaid: tier !== 'free',
+    isFacilities: tier === 'facilities',
     isStarter: tier === 'starter',
     isPro: tier === 'pro',
     isPremium: tier === 'premium',
     isHrAdmin: tier === 'hr_admin',
     isProOrAbove: ['pro', 'premium', 'hr_admin'].includes(tier),
     isPremiumOrAbove: ['premium', 'hr_admin'].includes(tier),
+
+    // Job access check (facilities tier cannot access job details)
+    canAccessJobs: tier !== 'facilities',
 
     // Refetch function
     refetch,

@@ -185,8 +185,19 @@ async def list_posts(
     params = {"user_id": user_id} if user_id else {}
 
     if category:
-        query += " WHERE (LOWER(p.category_name) = LOWER(:category) OR LOWER(REPLACE(p.category_name, ' ', '-')) = LOWER(:category) OR p.category_id = :category)"
-        params["category"] = category
+        # First try to find the category by slug to get the actual category_id
+        cat_result = db.execute(
+            text("SELECT id, name FROM community_categories WHERE slug = :slug OR id::text = :slug"),
+            {"slug": category}
+        ).first()
+
+        if cat_result:
+            query += " WHERE p.category_id = :category_id"
+            params["category_id"] = str(cat_result.id)
+        else:
+            # Fallback to name matching
+            query += " WHERE (LOWER(p.category_name) = LOWER(:category) OR p.category_id::text = :category)"
+            params["category"] = category
 
     query += " ORDER BY p.is_pinned DESC, p.created_at DESC LIMIT 50"
 

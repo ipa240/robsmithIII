@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useAuth } from 'react-oidc-context'
+import { Link } from 'react-router-dom'
 import { api } from '../api/client'
+import { useSubscription, isAdminUnlocked } from '../hooks/useSubscription'
 import {
   Newspaper, TrendingUp, Clock, ExternalLink, Bookmark, Share2,
-  Filter, ChevronRight, Star, MapPin
+  Filter, ChevronRight, Star, MapPin, Crown, Lock
 } from 'lucide-react'
 
 interface Article {
@@ -119,6 +122,8 @@ const CATEGORIES = [
 ]
 
 export default function News() {
+  const auth = useAuth()
+  const { isPaid } = useSubscription()
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -222,20 +227,40 @@ export default function News() {
             </div>
           </div>
 
-          {/* Newsletter */}
+          {/* Newsletter - Requires $9+ subscription */}
           <div className="bg-gradient-to-br from-primary-500 to-accent-500 rounded-xl p-4 text-white">
-            <h3 className="font-semibold mb-2">Weekly Digest</h3>
+            <div className="flex items-center gap-2 mb-2">
+              <Crown className="w-4 h-4" />
+              <h3 className="font-semibold">Weekly Digest</h3>
+            </div>
             <p className="text-sm text-primary-100 mb-3">
               Get the top nursing news delivered to your inbox every Sunday.
             </p>
-            <input
-              type="email"
-              placeholder="Your email"
-              className="w-full px-3 py-2 rounded-lg bg-white/20 placeholder-primary-200 text-white text-sm mb-2"
-            />
-            <button className="w-full py-2 bg-white text-primary-600 rounded-lg text-sm font-medium hover:bg-primary-50">
-              Subscribe
-            </button>
+            {(auth.isAuthenticated && isPaid) || isAdminUnlocked() ? (
+              <>
+                <input
+                  type="email"
+                  placeholder="Your email"
+                  className="w-full px-3 py-2 rounded-lg bg-white/20 placeholder-primary-200 text-white text-sm mb-2"
+                />
+                <button className="w-full py-2 bg-white text-primary-600 rounded-lg text-sm font-medium hover:bg-primary-50">
+                  Subscribe
+                </button>
+              </>
+            ) : (
+              <div className="bg-white/10 rounded-lg p-3 text-center">
+                <Lock className="w-5 h-5 mx-auto mb-2 text-white/80" />
+                <p className="text-xs text-primary-100 mb-2">
+                  Available for Pro subscribers ($9/mo)
+                </p>
+                <Link
+                  to="/billing"
+                  className="block w-full py-2 bg-white text-primary-600 rounded-lg text-sm font-medium hover:bg-primary-50"
+                >
+                  Upgrade to Pro
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 

@@ -9,7 +9,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { useSubscription } from '../hooks/useSubscription'
+import { useSubscription, isAdminUnlocked } from '../hooks/useSubscription'
 
 interface Facility {
   id: string
@@ -80,7 +80,7 @@ export default function Map() {
   const auth = useAuth()
   const { isPaid } = useSubscription()
   // Only show scores if user is authenticated AND has a paid subscription
-  const canSeeAllScores = auth.isAuthenticated && isPaid
+  const canSeeAllScores = (auth.isAuthenticated && isPaid) || isAdminUnlocked()
   const [selectedFacility, setSelectedFacility] = useState<Facility | null>(null)
   const [filters, setFilters] = useState({
     minGrade: 'F',
@@ -250,8 +250,9 @@ export default function Map() {
               />
               <MapController center={mapCenter} zoom={zoom} />
 
-              {filteredFacilities.map(facility => {
-                const canSeeScore = canSeeAllScores || globalTop3Ids.has(facility.id)
+              {filteredFacilities.map((facility, index) => {
+                // Show score for first 3 facilities in list (consistent with Facilities page)
+                const canSeeScore = canSeeAllScores || index < 3
                 return (
                   <Marker
                     key={facility.id}
@@ -265,27 +266,28 @@ export default function Map() {
                       <div className="min-w-[200px]">
                         <h3 className="font-bold text-slate-900 mb-1">{facility.name}</h3>
                         <p className="text-sm text-slate-600 mb-2">{facility.city}</p>
-                        {canSeeScore ? (
-                          <div className="flex items-center gap-2 mb-2">
-                            <div
-                              className="px-2 py-1 rounded text-white text-xs font-bold"
-                              style={{ backgroundColor: GRADE_COLORS[facility.ofs_grade] }}
-                            >
-                              {facility.ofs_grade}
+                        <div className="mb-2">
+                          <span className="text-[9px] text-slate-400 uppercase tracking-wider">Facility Score</span>
+                          {canSeeScore ? (
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="px-2 py-1 rounded text-white text-xs font-bold"
+                                style={{ backgroundColor: GRADE_COLORS[facility.ofs_grade] }}
+                              >
+                                {facility.ofs_grade}
+                              </div>
+                              <span className="text-sm text-slate-600">{facility.ofs_score}/100</span>
                             </div>
-                            <span className="text-sm text-slate-600">Score: {facility.ofs_score}</span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="px-2 py-1 rounded bg-slate-200 text-slate-400 text-xs font-bold relative">
-                              <span className="blur-[3px] select-none">A+</span>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <div className="px-2 py-1 rounded bg-slate-200 text-slate-400 text-xs font-bold relative">
+                                <span className="blur-[3px] select-none">A+</span>
+                                <Lock className="absolute inset-0 m-auto w-3 h-3 text-slate-400" />
+                              </div>
+                              <span className="text-sm text-slate-400">Upgrade to view</span>
                             </div>
-                            <span className="text-sm text-slate-400 flex items-center gap-1">
-                              <Lock className="w-3 h-3" />
-                              Upgrade to view
-                            </span>
-                          </div>
-                        )}
+                          )}
+                        </div>
                         <div className="text-sm text-slate-600 mb-2">
                           {facility.job_count} open positions
                         </div>
@@ -332,7 +334,9 @@ export default function Map() {
           {selectedFacility ? (
             /* Facility Detail */
             (() => {
-              const canSeeScore = canSeeAllScores || globalTop3Ids.has(selectedFacility.id)
+              // Find index of selected facility in filtered list
+              const selectedIndex = filteredFacilities.findIndex(f => f.id === selectedFacility.id)
+              const canSeeScore = canSeeAllScores || selectedIndex < 3
               return (
                 <div className="p-4">
                   <div className="flex items-start justify-between mb-4">
@@ -359,7 +363,7 @@ export default function Map() {
                         </div>
                         <div>
                           <div className="text-2xl font-bold text-slate-900">{selectedFacility.ofs_score}</div>
-                          <div className="text-sm text-slate-500">OFS Score</div>
+                          <div className="text-sm text-slate-500">Facility Score</div>
                         </div>
                       </>
                     ) : (
@@ -426,8 +430,9 @@ export default function Map() {
                     {isLoading ? 'Loading facilities...' : 'No facilities match your filters'}
                   </div>
                 ) : (
-                  filteredFacilities.map(facility => {
-                    const canSeeScore = canSeeAllScores || globalTop3Ids.has(facility.id)
+                  filteredFacilities.map((facility, index) => {
+                    // Show score for first 3 facilities in list
+                    const canSeeScore = canSeeAllScores || index < 3
                     return (
                       <button
                         key={facility.id}
@@ -439,19 +444,23 @@ export default function Map() {
                         className="w-full p-4 text-left border-b border-slate-100 hover:bg-slate-50 transition-colors"
                       >
                         <div className="flex items-start gap-3">
-                          {canSeeScore ? (
-                            <div
-                              className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-                              style={{ backgroundColor: GRADE_COLORS[facility.ofs_grade] }}
-                            >
-                              {facility.ofs_grade}
-                            </div>
-                          ) : (
-                            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-slate-100 text-slate-300 text-sm font-bold flex-shrink-0 relative">
-                              <span className="blur-[3px] select-none">A+</span>
-                              <Lock className="absolute w-3 h-3 text-slate-400" />
-                            </div>
-                          )}
+                          <div className="flex flex-col items-center flex-shrink-0">
+                            <span className="text-[7px] text-slate-400 uppercase tracking-wider mb-0.5">Score</span>
+                            {canSeeScore ? (
+                              <div
+                                className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold"
+                                style={{ backgroundColor: GRADE_COLORS[facility.ofs_grade] }}
+                                title="Facility Score"
+                              >
+                                {facility.ofs_grade}
+                              </div>
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-slate-100 text-slate-300 text-sm font-bold relative" title="Upgrade to view Facility Score">
+                                <span className="blur-[3px] select-none">A+</span>
+                                <Lock className="absolute w-3 h-3 text-slate-400" />
+                              </div>
+                            )}
+                          </div>
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-slate-900 truncate">{facility.name}</div>
                             <div className="text-sm text-slate-500">{facility.city}</div>

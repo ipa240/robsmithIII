@@ -5,7 +5,7 @@ import { useAuth } from 'react-oidc-context'
 import { Search, X, Trophy, ArrowLeft } from 'lucide-react'
 import { api } from '../api/client'
 import IndexRadar from '../components/scoring/IndexRadar'
-import { useSubscription } from '../hooks/useSubscription'
+import { useSubscription, isAdminUnlocked } from '../hooks/useSubscription'
 import BlurOverlay from '../components/BlurOverlay'
 
 interface Facility {
@@ -46,10 +46,29 @@ export default function Compare() {
   const auth = useAuth()
   const { isPaid } = useSubscription()
   // Only show content if authenticated AND paid
-  const canAccessFeature = auth.isAuthenticated && isPaid
+  const canAccessFeature = (auth.isAuthenticated && isPaid) || isAdminUnlocked()
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [showSearch, setShowSearch] = useState(false)
+
+  // Sample data for blur preview
+  const sampleFacilities = [
+    { id: '1', name: 'Inova Fairfax Hospital', city: 'Falls Church', grade: 'A', score: 92, jobs: 47 },
+    { id: '2', name: 'VCU Medical Center', city: 'Richmond', grade: 'A-', score: 88, jobs: 35 },
+    { id: '3', name: 'Sentara Norfolk General', city: 'Norfolk', grade: 'B+', score: 85, jobs: 28 },
+  ]
+  const sampleIndices = [
+    { name: 'Pay Competitiveness', scores: [88, 82, 79] },
+    { name: 'Employee Reviews', scores: [91, 85, 88] },
+    { name: 'Location Safety', scores: [94, 78, 82] },
+    { name: 'Patient Experience', scores: [89, 92, 84] },
+    { name: 'Facility Stats', scores: [93, 90, 86] },
+    { name: 'Amenities & Lifestyle', scores: [86, 88, 81] },
+    { name: 'Job Transparency', scores: [95, 84, 89] },
+    { name: 'Commute Stress', scores: [78, 85, 80] },
+    { name: 'Quality of Life', scores: [92, 86, 83] },
+    { name: 'Climate Comfort', scores: [85, 85, 85] },
+  ]
 
   // If user is not paid, show blur overlay over entire page
   if (!canAccessFeature) {
@@ -60,32 +79,97 @@ export default function Compare() {
         showDemo
         demoKey="compare"
         showPricing
+        blurIntensity="light"
       >
         <div className="space-y-6">
+          {/* Header */}
           <div className="flex items-center gap-4">
-            <div className="w-5 h-5 bg-slate-200 rounded" />
+            <div className="text-slate-400">
+              <ArrowLeft className="w-5 h-5" />
+            </div>
             <div>
-              <div className="h-8 w-64 bg-slate-200 rounded mb-2" />
-              <div className="h-5 w-48 bg-slate-100 rounded" />
+              <h1 className="text-3xl font-bold text-slate-900">Compare Facilities</h1>
+              <p className="text-slate-600">Side-by-side comparison of up to 5 facilities</p>
             </div>
           </div>
 
+          {/* Add button */}
           <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <div className="h-12 w-full bg-slate-100 rounded-lg" />
+            <div className="w-full py-3 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 text-center">
+              + Add Facility to Compare (3/5)
+            </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-6">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-white rounded-xl border border-slate-200 p-6">
-                <div className="h-6 w-32 bg-slate-200 rounded mb-4" />
-                <div className="h-40 w-full bg-slate-100 rounded mb-4" />
-                <div className="space-y-2">
-                  {[1, 2, 3, 4, 5].map((j) => (
-                    <div key={j} className="h-4 w-full bg-slate-100 rounded" />
-                  ))}
-                </div>
-              </div>
+          {/* Selected pills */}
+          <div className="flex flex-wrap gap-2">
+            {sampleFacilities.map((f) => (
+              <span key={f.id} className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-50 text-primary-700 rounded-full text-sm">
+                {f.name}
+                <X className="w-4 h-4" />
+              </span>
             ))}
+          </div>
+
+          {/* Comparison Table */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-200">
+                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-500 bg-slate-50 w-40">Index</th>
+                    {sampleFacilities.map((f) => (
+                      <th key={f.id} className="px-4 py-3 text-center min-w-[150px]">
+                        <span className="text-primary-600">{f.name}</span>
+                        <div className="text-xs text-slate-400 mt-1">{f.city}, VA</div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* OFS Overall */}
+                  <tr className="border-b border-slate-100 bg-slate-50">
+                    <td className="px-4 py-3 font-semibold text-slate-900">Overall OFS</td>
+                    {sampleFacilities.map((f, i) => (
+                      <td key={f.id} className="px-4 py-3 text-center">
+                        <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${getGradeColor(f.grade)}`}>
+                          {f.grade}
+                          <span className="text-sm opacity-80">{f.score}</span>
+                          {i === 0 && <Trophy className="w-4 h-4 text-amber-300" />}
+                        </span>
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Each Index */}
+                  {sampleIndices.map((idx, idxNum) => (
+                    <tr key={idx.name} className="border-b border-slate-100">
+                      <td className="px-4 py-3 text-slate-700">{idx.name}</td>
+                      {idx.scores.map((score, i) => {
+                        const isBest = score === Math.max(...idx.scores)
+                        return (
+                          <td key={i} className="px-4 py-3 text-center">
+                            <span className={score >= 80 ? 'text-emerald-600 font-bold' : score >= 60 ? 'text-sky-600' : 'text-amber-600'}>
+                              {score}
+                              {isBest && <Trophy className="inline w-4 h-4 ml-1 text-amber-500" />}
+                            </span>
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+
+                  {/* Job Count */}
+                  <tr className="border-t border-slate-200 bg-slate-50">
+                    <td className="px-4 py-3 font-semibold text-slate-900">Open Jobs</td>
+                    {sampleFacilities.map((f) => (
+                      <td key={f.id} className="px-4 py-3 text-center font-medium text-primary-600">
+                        {f.jobs}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </BlurOverlay>

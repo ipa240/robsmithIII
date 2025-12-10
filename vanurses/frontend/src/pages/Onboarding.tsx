@@ -15,16 +15,19 @@ const CERTIFICATIONS = ['ACLS', 'BLS', 'PALS', 'NRP', 'TNCC', 'CCRN', 'CEN', 'CN
 const EMPLOYMENT_TYPES = ['Full-Time', 'Part-Time', 'PRN', 'Contract', 'Travel', 'Temporary', 'Other']
 const SHIFTS = ['Days', 'Nights', 'Evenings', 'Rotating', 'Weekends', '8-Hour', '10-Hour', '12-Hour']
 
-// OFS Index definitions for priority ratings
+// OFS Index definitions for priority ratings (11 indices)
 const OFS_INDICES = [
   { code: 'pci', title: 'Pay & Compensation', desc: 'How important is competitive salary?' },
-  { code: 'ali', title: 'Amenities & Lifestyle', desc: 'Nearby dining, shopping, gyms?' },
-  { code: 'csi', title: 'Commute', desc: 'Low traffic, easy drive?' },
-  { code: 'cci', title: 'Climate & Weather', desc: 'Pleasant year-round climate?' },
+  { code: 'eri', title: 'Employee Reviews', desc: 'Good work-life balance, management?' },
   { code: 'lssi', title: 'Safety & Security', desc: 'Low crime, safe area?' },
-  { code: 'qli', title: 'Quality of Life', desc: 'Community demographics & livability?' },
   { code: 'pei', title: 'Patient Experience', desc: 'High patient satisfaction scores?' },
   { code: 'fsi', title: 'Facility Quality', desc: 'Quality ratings, capacity, services?' },
+  { code: 'ali', title: 'Amenities & Lifestyle', desc: 'Nearby dining, shopping, gyms?' },
+  { code: 'jti', title: 'Job Transparency', desc: 'Clear pay info, benefits disclosed?' },
+  { code: 'csi', title: 'Commute', desc: 'Low traffic, easy drive?' },
+  { code: 'qli', title: 'Quality of Life', desc: 'Community demographics & livability?' },
+  { code: 'oii', title: 'Opportunity Insights', desc: 'Economic mobility, long-term growth?', isNew: true },
+  { code: 'cci', title: 'Climate & Weather', desc: 'Pleasant year-round climate?' },
 ]
 
 const steps = [
@@ -278,10 +281,10 @@ export default function Onboarding() {
     // Location
     location_zip: '',
 
-    // OFS Index priorities (1-5 scale, default 3)
+    // OFS Index priorities (1-5 scale, default 3) - all 11 indices
     index_priorities: {
-      pci: 3, ali: 3, csi: 3, cci: 3,
-      lssi: 3, qli: 3, pei: 3, fsi: 3
+      pci: 3, eri: 3, lssi: 3, pei: 3, fsi: 3,
+      ali: 3, jti: 3, csi: 3, qli: 3, oii: 3, cci: 3
     } as Record<string, number>
   })
 
@@ -638,10 +641,13 @@ export default function Onboarding() {
                 Rate how important each factor is to you (tap hearts to rate 1-5)
               </p>
               <div className="space-y-4">
-                {OFS_INDICES.map(index => (
-                  <div key={index.code} className="flex items-center justify-between py-2 border-b border-slate-100">
+                {OFS_INDICES.map((index: any) => (
+                  <div key={index.code} className={`flex items-center justify-between py-2 border-b ${index.isNew ? 'border-sky-200 bg-sky-50/50 -mx-2 px-2 rounded-lg' : 'border-slate-100'}`}>
                     <div className="flex-1">
-                      <div className="font-medium text-slate-800">{index.title}</div>
+                      <div className="font-medium text-slate-800 flex items-center gap-2">
+                        {index.title}
+                        {index.isNew && <span className="text-[10px] px-1.5 py-0.5 bg-sky-500 text-white rounded font-medium">NEW</span>}
+                      </div>
                       <div className="text-xs text-slate-500">{index.desc}</div>
                     </div>
                     <div className="flex gap-1 ml-4">

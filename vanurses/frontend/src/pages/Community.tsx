@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useAuth } from 'react-oidc-context'
+import { isAdminUnlocked } from '../hooks/useSubscription'
 import { api } from '../api/client'
 import { Link } from 'react-router-dom'
 import {
   MessageSquare, Users, TrendingUp, Plus, ThumbsUp, Eye, Clock,
   ChevronRight, Pin, Lock, User, Send, Flag, X, ArrowUp, ArrowDown,
-  Edit2, Trash2, MoreVertical, Lightbulb, Loader2
+  Edit2, Trash2, MoreVertical, Lightbulb, Loader2, Sparkles
 } from 'lucide-react'
 
 interface Category {
@@ -54,6 +56,7 @@ const ICON_OPTIONS = [
 ]
 
 export default function Community() {
+  const auth = useAuth()
   const queryClient = useQueryClient()
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
@@ -166,6 +169,119 @@ export default function Community() {
     if (hours < 24) return `${hours}h ago`
     if (days < 7) return `${days}d ago`
     return date.toLocaleDateString()
+  }
+
+  // Show demo/signup prompt for non-authenticated users
+  if (!auth.isAuthenticated && !isAdminUnlocked()) {
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Community</h1>
+          <p className="text-slate-600">Connect with nurses across Virginia</p>
+        </div>
+
+        {/* Free Account CTA */}
+        <div className="bg-gradient-to-r from-primary-600 to-accent-600 rounded-xl p-8 text-white">
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Users className="w-7 h-7" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-2xl font-bold mb-2">Join the Virginia Nurses Community</h2>
+              <p className="text-primary-100 mb-4 max-w-2xl">
+                Connect with fellow nurses, share experiences, ask questions, and get advice from the community.
+                <strong className="text-white"> 100% free with your account!</strong>
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => auth.signinRedirect()}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-white text-primary-600 rounded-lg font-semibold hover:bg-primary-50"
+                >
+                  <Sparkles className="w-5 h-5" />
+                  Create Free Account
+                </button>
+                <button
+                  onClick={() => auth.signinRedirect()}
+                  className="inline-flex items-center gap-2 px-6 py-3 border-2 border-white/50 text-white rounded-lg font-medium hover:bg-white/10"
+                >
+                  Already have an account? Log In
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Demo Preview - Blurred */}
+        <div className="relative">
+          <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-10 rounded-xl flex items-center justify-center">
+            <div className="text-center p-8">
+              <Lock className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-slate-900 mb-2">Community Preview</h3>
+              <p className="text-slate-600 mb-4 max-w-md">
+                Create a free account to join discussions, share advice, and connect with Virginia nurses.
+              </p>
+              <button
+                onClick={() => auth.signinRedirect()}
+                className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+              >
+                Sign Up Free
+              </button>
+            </div>
+          </div>
+
+          {/* Demo Stats */}
+          <div className="grid grid-cols-3 gap-4 mb-6 opacity-50">
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
+                  <Users className="w-5 h-5 text-primary-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-slate-900">2,847</p>
+                  <p className="text-sm text-slate-500">Members</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-accent-100 rounded-lg flex items-center justify-center">
+                  <MessageSquare className="w-5 h-5 text-accent-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-slate-900">1,234</p>
+                  <p className="text-sm text-slate-500">Discussions</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                  <TrendingUp className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-slate-900">+127</p>
+                  <p className="text-sm text-slate-500">This Week</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Demo Categories */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4 opacity-50">
+            <h3 className="font-semibold text-slate-900 mb-3">Popular Topics</h3>
+            <div className="space-y-2">
+              {['Career Advice', 'Salary Discussions', 'Work-Life Balance', 'Job Hunting Tips', 'Specialty Talk'].map(topic => (
+                <div key={topic} className="flex items-center gap-2 p-2 rounded-lg bg-slate-50">
+                  <MessageSquare className="w-4 h-4 text-slate-400" />
+                  <span className="text-sm text-slate-600">{topic}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

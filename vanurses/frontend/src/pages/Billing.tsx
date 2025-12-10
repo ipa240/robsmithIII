@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import {
   CreditCard, Check, Zap, Crown, Building2,
   Clock, Star, ArrowRight, Package, History,
-  CheckCircle, XCircle, ExternalLink
+  CheckCircle, XCircle, ExternalLink, Heart
 } from 'lucide-react'
 import { useAuth } from 'react-oidc-context'
 import { api, setAuthToken } from '../api/client'
@@ -54,6 +54,7 @@ interface Transaction {
 
 const TIER_ICONS: Record<string, typeof Star> = {
   free: Clock,
+  facilities: Heart,
   starter: Zap,
   pro: Star,
   premium: Crown,
@@ -303,7 +304,7 @@ export default function Billing() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {tiers.map((tier) => {
             const Icon = TIER_ICONS[tier.id] || Star
             const price = billingPeriod === 'yearly' ? tier.yearly_price : tier.monthly_price

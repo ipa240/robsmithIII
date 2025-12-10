@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Search, MapPin, Building2, Briefcase, Star, ChevronLeft, ChevronRight, Filter, X, SlidersHorizontal, Lock, TrendingUp, ArrowRight, Crown } from 'lucide-react'
+import { Search, MapPin, Building2, Briefcase, Star, ChevronLeft, ChevronRight, Filter, X, SlidersHorizontal, Lock, TrendingUp, ArrowRight, Crown, Radio, RefreshCw } from 'lucide-react'
 import { api } from '../api/client'
 import { toTitleCase } from '../utils/format'
 import { useAuth } from 'react-oidc-context'
-import { useSubscription } from '../hooks/useSubscription'
+import { useSubscription, isAdminUnlocked } from '../hooks/useSubscription'
 
 function getGradeColor(grade: string) {
   // Handle grades with +/- modifiers (A+, A, A-, etc.)
@@ -20,7 +20,7 @@ function getGradeColor(grade: string) {
   }
 }
 
-// Index descriptions for tooltips
+// Index descriptions for tooltips (11 indices)
 const INDEX_INFO: Record<string, { name: string; desc: string }> = {
   pci: { name: 'Pay', desc: 'Pay Competitiveness - Salary vs market rates' },
   eri: { name: 'Reviews', desc: 'Employee Reviews - Staff satisfaction scores' },
@@ -31,6 +31,7 @@ const INDEX_INFO: Record<string, { name: string; desc: string }> = {
   jti: { name: 'Transparency', desc: 'Job Transparency - Pay disclosure rate' },
   csi: { name: 'Commute', desc: 'Commute Stress - Traffic & accessibility' },
   qli: { name: 'QoL', desc: 'Quality of Life - Cost of living, schools' },
+  oii: { name: 'Opportunity', desc: 'Opportunity Insights - Economic mobility' },
   cci: { name: 'Climate', desc: 'Climate Comfort - Weather patterns' },
 }
 
@@ -38,7 +39,7 @@ export default function Facilities() {
   const auth = useAuth()
   const { isPaid } = useSubscription()
   // Only show scores if user is authenticated AND has a paid subscription
-  const canSeeAllScores = auth.isAuthenticated && isPaid
+  const canSeeAllScores = (auth.isAuthenticated && isPaid) || isAdminUnlocked()
   const [search, setSearch] = useState('')
   const [region, setRegion] = useState('')
   const [system, setSystem] = useState('')
@@ -102,12 +103,53 @@ export default function Facilities() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900 mb-2">Facility Rankings</h1>
-        <p className="text-slate-600">
-          {total} healthcare facilities rated with our 10-index OFS scoring system
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 mb-2">Facility Rankings</h1>
+          <p className="text-slate-600">
+            {total} healthcare facilities rated with our 11-index OFS scoring system
+          </p>
+        </div>
+        {/* Live Indicator */}
+        <div className="flex items-center gap-3 bg-slate-900 text-white px-4 py-2.5 rounded-xl">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            <span className="text-sm font-medium text-emerald-400">LIVE</span>
+          </div>
+          <div className="w-px h-4 bg-slate-600" />
+          <div className="flex items-center gap-1.5 text-sm text-slate-300">
+            <RefreshCw className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: '3s' }} />
+            <span>Updating scores</span>
+          </div>
+        </div>
       </div>
+
+      {/* Upgrade Banner for non-paid users */}
+      {!canSeeAllScores && (
+        <div className="bg-gradient-to-r from-primary-600 to-accent-600 rounded-xl p-6 text-white">
+          <div className="flex flex-col md:flex-row items-center gap-4">
+            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+              <Crown className="w-6 h-6" />
+            </div>
+            <div className="flex-1 text-center md:text-left">
+              <h3 className="font-bold text-lg">Unlock All Facility Scores</h3>
+              <p className="text-primary-100 text-sm">
+                Starting at only <span className="font-semibold text-white">$9/month</span> · Built by a nurse, for nurses
+              </p>
+            </div>
+            <Link
+              to="/billing"
+              className="px-6 py-2.5 bg-white text-primary-600 rounded-lg font-semibold hover:bg-primary-50 transition-colors flex items-center gap-2"
+            >
+              <Crown className="w-4 h-4" />
+              Upgrade Now
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Latest Scores Banner */}
       {latestScores && latestScores.length > 0 && (
@@ -294,9 +336,9 @@ export default function Facilities() {
       ) : (
         <div className="space-y-4 relative">
           {facilities.map((facility: any, index: number) => {
-            const isBlurred = !auth.isAuthenticated && index >= FREE_VISIBLE_COUNT
-            // Show score if: paid user, OR this facility is in global top 3
-            const canSeeScore = canSeeAllScores || globalTop3Ids.has(facility.id)
+            const isBlurred = (!auth.isAuthenticated && !isAdminUnlocked()) && index >= FREE_VISIBLE_COUNT
+            // Show score if: paid user, OR first 3 in current list
+            const canSeeScore = canSeeAllScores || index < FREE_VISIBLE_COUNT
 
             return (
               <div key={facility.id} className="relative">
@@ -310,24 +352,45 @@ export default function Facilities() {
                   }`}
                 >
                   <div className="flex items-start gap-6">
-                    {/* Score */}
+                    {/* Facility Score */}
                     <div className="flex-shrink-0">
                       {facility.score ? (
                         canSeeScore ? (
-                          <div className={`w-16 h-16 rounded-xl flex flex-col items-center justify-center text-white ${getGradeColor(facility.score.ofs_grade)}`}>
-                            <span className="text-2xl font-bold">{facility.score.ofs_grade}</span>
-                            <span className="text-xs opacity-80">{Math.round(facility.score.ofs_score)}</span>
+                          <div className="flex flex-col items-center">
+                            <span className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Facility Score</span>
+                            <div className={`w-16 h-16 rounded-xl flex flex-col items-center justify-center text-white ${getGradeColor(facility.score.ofs_grade)}`} title="OFS: 11 scoring indices">
+                              <span className="text-2xl font-bold">{facility.score.ofs_grade}</span>
+                              <span className="text-xs opacity-80">{Math.round(facility.score.ofs_score)}</span>
+                            </div>
                           </div>
                         ) : (
-                          <div className="w-16 h-16 rounded-xl bg-slate-100 flex flex-col items-center justify-center relative" title="Upgrade to view score">
-                            <span className="text-xl font-bold text-slate-300 blur-[3px] select-none">A+</span>
-                            <span className="text-xs text-slate-200 blur-[2px] select-none">95</span>
-                            <Lock className="absolute w-5 h-5 text-slate-400" />
+                          <div className="flex flex-col items-center group/score relative">
+                            <span className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Facility Score</span>
+                            <div className="w-16 h-16 rounded-xl bg-white/60 backdrop-blur-[2px] border border-slate-200 flex flex-col items-center justify-center relative cursor-pointer hover:bg-slate-100 transition-colors">
+                              <span className="text-xl font-bold text-slate-400 blur-[4px] select-none">B+</span>
+                              <span className="text-xs text-slate-300 blur-[3px] select-none">82</span>
+                              <Lock className="absolute w-4 h-4 text-slate-400" />
+                            </div>
+                            <span className="text-[8px] text-slate-400 mt-1">Sample</span>
+                            {/* Tooltip */}
+                            <div className="absolute -bottom-14 left-1/2 -translate-x-1/2 opacity-0 group-hover/score:opacity-100 transition-opacity pointer-events-none z-20">
+                              <Link
+                                to="/billing"
+                                className="pointer-events-auto whitespace-nowrap px-3 py-2 bg-slate-800 text-white text-xs rounded-lg shadow-lg flex items-center gap-1.5"
+                              >
+                                <Crown className="w-3 h-3 text-amber-400" />
+                                Upgrade to unlock
+                              </Link>
+                              <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 rotate-45" />
+                            </div>
                           </div>
                         )
                       ) : (
-                        <div className="w-16 h-16 rounded-xl bg-slate-100 flex items-center justify-center">
-                          <span className="text-slate-400 text-sm">N/A</span>
+                        <div className="flex flex-col items-center">
+                          <span className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Facility Score</span>
+                          <div className="w-16 h-16 rounded-xl bg-slate-100 flex items-center justify-center">
+                            <span className="text-slate-400 text-sm">N/A</span>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -399,18 +462,24 @@ export default function Facilities() {
                             </>
                           ) : (
                             <>
-                              {/* Blurred placeholder indices for free users */}
-                              {['Pay', 'Reviews', 'Safety', 'Patient', 'QoL'].map((name) => (
+                              {/* Blurred sample indices for free users */}
+                              {[
+                                { name: 'Pay', score: 72 },
+                                { name: 'Reviews', score: 68 },
+                                { name: 'Safety', score: 85 },
+                                { name: 'Patient', score: 77 },
+                                { name: 'Facility', score: 64 }
+                              ].map((item) => (
                                 <span
-                                  key={name}
-                                  className="px-2 py-1 rounded text-xs font-medium bg-slate-100 text-slate-300 blur-[2px] select-none"
+                                  key={item.name}
+                                  className="px-2 py-1 rounded text-xs font-medium bg-white/60 backdrop-blur-[2px] border border-slate-200 text-slate-400 blur-[3px] select-none"
                                 >
-                                  {name}: 85
+                                  {item.name}: {item.score}
                                 </span>
                               ))}
-                              <span className="px-2 py-1 rounded text-xs text-slate-400 bg-slate-50 flex items-center gap-1">
-                                <Crown className="w-3 h-3" />
-                                Upgrade to view
+                              <span className="px-2 py-1 rounded text-xs text-slate-400 bg-slate-50 border border-slate-200 flex items-center gap-1">
+                                <Lock className="w-3 h-3" />
+                                Sample Data
                               </span>
                             </>
                           )}
@@ -424,7 +493,7 @@ export default function Facilities() {
           })}
 
           {/* Upgrade overlay for unauthenticated users */}
-          {!auth.isAuthenticated && facilities.length > FREE_VISIBLE_COUNT && (
+          {(!auth.isAuthenticated && !isAdminUnlocked()) && facilities.length > FREE_VISIBLE_COUNT && (
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-50 via-slate-50/95 to-transparent pt-32 pb-8 -mt-24 rounded-b-xl">
               <div className="text-center">
                 <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 rounded-full mb-4">

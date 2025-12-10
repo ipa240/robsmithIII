@@ -3,18 +3,17 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
   Briefcase, Building2, Bookmark, DollarSign, ArrowRight,
-  MessageSquare, Newspaper, FileCheck, Clock, Send, Lock, Crown
+  Newspaper, FileCheck, Clock, Send, Lock, Crown
 } from 'lucide-react'
 import { api, setAuthToken } from '../api/client'
 import { useEffect, useState } from 'react'
-import { useSubscription } from '../hooks/useSubscription'
-import BlurOverlay from '../components/BlurOverlay'
+import { useSubscription, isAdminUnlocked } from '../hooks/useSubscription'
 
 export default function Dashboard() {
   const auth = useAuth()
   const { isPaid } = useSubscription()
   // Only show premium content if authenticated AND paid
-  const canSeePremiumContent = auth.isAuthenticated && isPaid
+  const canSeePremiumContent = (auth.isAuthenticated && isPaid) || isAdminUnlocked()
   const [sullyMessage, setSullyMessage] = useState('')
 
   // Set auth token for API calls
@@ -136,17 +135,55 @@ export default function Dashboard() {
               <DollarSign className="w-6 h-6 text-purple-600" />
             </div>
             <div>
-              <div className="text-2xl font-bold text-slate-900">
-                ${trendsOverview?.stats?.avgHourly?.toFixed(0) || '-'}
-              </div>
-              <div className="text-sm text-slate-500">Avg Hourly</div>
+              {trendsOverview?.stats?.avgHourlyByType ? (
+                <>
+                  <div className="text-sm font-bold text-slate-900">
+                    Market Rates
+                  </div>
+                  <div className="text-xs text-slate-500 space-y-0.5">
+                    <div>RN: ${trendsOverview.stats.avgHourlyByType.rn?.avgHourly?.toFixed(0) || '-'}/hr • LPN: ${trendsOverview.stats.avgHourlyByType.lpn?.avgHourly?.toFixed(0) || '-'}/hr</div>
+                    <div>CNA: ${trendsOverview.stats.avgHourlyByType.cna?.avgHourly?.toFixed(0) || '-'}/hr • NP: ${trendsOverview.stats.avgHourlyByType.np?.avgHourly?.toFixed(0) || '-'}/hr</div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold text-slate-900">
+                    ${trendsOverview?.stats?.avgHourly?.toFixed(0) || '-'}
+                  </div>
+                  <div className="text-sm text-slate-500">Avg Hourly</div>
+                </>
+              )}
             </div>
           </div>
         </Link>
       </div>
 
+      {/* Upgrade Banner - ONE banner for all premium features */}
+      {!canSeePremiumContent && (
+        <div className="bg-gradient-to-r from-primary-600 to-accent-600 rounded-xl p-6 text-white">
+          <div className="flex flex-col md:flex-row items-center gap-4">
+            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+              <Crown className="w-6 h-6" />
+            </div>
+            <div className="flex-1 text-center md:text-left">
+              <h2 className="text-lg font-bold">Unlock All Dashboard Features</h2>
+              <p className="text-primary-100 text-sm">
+                Starting at only <span className="font-semibold text-white">$9/month</span> · Built by a nurse, for nurses
+              </p>
+            </div>
+            <Link
+              to="/billing"
+              className="px-6 py-2.5 bg-white text-primary-600 rounded-lg font-semibold hover:bg-primary-50 flex-shrink-0 flex items-center gap-2"
+            >
+              <Crown className="w-4 h-4" />
+              Upgrade Now
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Personalized Matches CTA - Paid Feature */}
-      {user?.tier && user.tier !== 'free' ? (
+      {canSeePremiumContent && (
         <Link
           to="/results"
           className="block bg-gradient-to-r from-primary-600 to-accent-600 rounded-xl p-6 text-white hover:opacity-95 transition-opacity"
@@ -161,27 +198,18 @@ export default function Dashboard() {
             <ArrowRight className="w-6 h-6" />
           </div>
         </Link>
-      ) : (
-        <div className="bg-gradient-to-r from-slate-100 to-slate-200 rounded-xl p-6 border border-slate-300">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-slate-800 mb-1">Unlock Personalized Job Matches</h2>
-              <p className="text-slate-600 text-sm">
-                Upgrade to see jobs ranked by your priorities and preferences
-              </p>
-            </div>
-            <Link
-              to="/billing"
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium"
-            >
-              Upgrade
-            </Link>
-          </div>
-        </div>
       )}
 
       {/* Recent Jobs */}
-      {canSeePremiumContent ? (
+      <div className="relative">
+        {!canSeePremiumContent && (
+          <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] z-10 rounded-xl flex flex-col items-center justify-center">
+            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-2">
+              <Lock className="w-6 h-6 text-slate-400" />
+            </div>
+            <span className="text-xs text-slate-500 bg-white/80 px-2 py-1 rounded">Sample Data</span>
+          </div>
+        )}
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-slate-900">Recent Jobs</h2>
@@ -191,57 +219,66 @@ export default function Dashboard() {
             </Link>
           </div>
           <div className="space-y-3">
-            {recentJobs?.map((job: any) => (
-              <Link
-                key={job.id}
-                to={`/jobs/${job.id}`}
-                className="block p-4 rounded-lg border border-slate-100 hover:border-primary-200 hover:bg-primary-50/50 transition-colors"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium text-slate-900">{job.title}</h3>
-                    <div className="text-sm text-slate-500">
-                      {job.facility_name || 'Various Facilities'} • {job.city}, {job.state}
+            {canSeePremiumContent ? (
+              recentJobs?.map((job: any) => (
+                <Link
+                  key={job.id}
+                  to={`/jobs/${job.id}`}
+                  className="block p-4 rounded-lg border border-slate-100 hover:border-primary-200 hover:bg-primary-50/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-slate-900">{job.title}</h3>
+                      <div className="text-sm text-slate-500">
+                        {job.facility_name || 'Various Facilities'} • {job.city}, {job.state}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      {job.nursing_type && (
+                        <span className="px-2 py-1 bg-primary-50 text-primary-700 text-xs rounded-full">
+                          {job.nursing_type}
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    {job.nursing_type && (
-                      <span className="px-2 py-1 bg-primary-50 text-primary-700 text-xs rounded-full">
-                        {job.nursing_type}
-                      </span>
-                    )}
+                </Link>
+              ))
+            ) : (
+              // Placeholder data visible through light blur
+              [
+                { title: 'ICU Registered Nurse', facility: 'Sentara Norfolk General', location: 'Norfolk, VA', type: 'RN' },
+                { title: 'Emergency Room RN', facility: 'VCU Medical Center', location: 'Richmond, VA', type: 'RN' },
+                { title: 'Med-Surg Night Shift', facility: 'Inova Fairfax Hospital', location: 'Falls Church, VA', type: 'RN' },
+              ].map((job, i) => (
+                <div key={i} className="p-4 rounded-lg border border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-slate-900">{job.title}</h3>
+                      <div className="text-sm text-slate-500">
+                        {job.facility} • {job.location}
+                      </div>
+                    </div>
+                    <span className="px-2 py-1 bg-primary-50 text-primary-700 text-xs rounded-full">
+                      {job.type}
+                    </span>
                   </div>
                 </div>
-              </Link>
-            ))}
+              ))
+            )}
           </div>
         </div>
-      ) : (
-        <BlurOverlay
-          title="Recent Nursing Opportunities"
-          description="Upgrade to see personalized job recommendations and recent postings."
-          showPricing
-          demoKey="dashboard"
-          showDemo
-        >
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-slate-900">Recent Jobs</h2>
-            </div>
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="p-4 rounded-lg border border-slate-100">
-                  <div className="h-5 w-48 bg-slate-200 rounded mb-2" />
-                  <div className="h-4 w-32 bg-slate-100 rounded" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </BlurOverlay>
-      )}
+      </div>
 
       {/* Top Facilities */}
-      {canSeePremiumContent ? (
+      <div className="relative">
+        {!canSeePremiumContent && (
+          <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] z-10 rounded-xl flex flex-col items-center justify-center">
+            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-2">
+              <Lock className="w-6 h-6 text-slate-400" />
+            </div>
+            <span className="text-xs text-slate-500 bg-white/80 px-2 py-1 rounded">Sample Data</span>
+          </div>
+        )}
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-slate-900">Top Rated Facilities</h2>
@@ -251,65 +288,70 @@ export default function Dashboard() {
             </Link>
           </div>
           <div className="space-y-3">
-            {topFacilities?.map((facility: any) => (
-              <Link
-                key={facility.id}
-                to={`/facilities/${facility.id}`}
-                className="block p-4 rounded-lg border border-slate-100 hover:border-primary-200 hover:bg-primary-50/50 transition-colors"
-              >
-                <div className="flex items-center gap-4">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold ${
-                    facility.score?.ofs_grade === 'A' || facility.ofs_grade === 'A' ? 'bg-emerald-500' :
-                    facility.score?.ofs_grade === 'B' || facility.ofs_grade === 'B' ? 'bg-blue-500' :
-                    facility.score?.ofs_grade === 'C' || facility.ofs_grade === 'C' ? 'bg-amber-500' :
-                    facility.score?.ofs_grade === 'D' || facility.ofs_grade === 'D' ? 'bg-orange-500' :
-                    facility.score?.ofs_grade === 'F' || facility.ofs_grade === 'F' ? 'bg-red-500' :
-                    'bg-slate-400'
-                  }`}>
-                    {facility.score?.ofs_grade || facility.ofs_grade || '-'}
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-medium text-slate-900">{facility.name}</h3>
-                    <div className="text-sm text-slate-500">
-                      {facility.system_name || facility.city}, {facility.state}
+            {canSeePremiumContent ? (
+              topFacilities?.map((facility: any) => (
+                <Link
+                  key={facility.id}
+                  to={`/facilities/${facility.id}`}
+                  className="block p-4 rounded-lg border border-slate-100 hover:border-primary-200 hover:bg-primary-50/50 transition-colors"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="flex flex-col items-center">
+                      <span className="text-[7px] text-slate-400 uppercase tracking-wider mb-0.5">Score</span>
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold ${
+                        facility.score?.ofs_grade === 'A' || facility.ofs_grade === 'A' ? 'bg-emerald-500' :
+                        facility.score?.ofs_grade === 'B' || facility.ofs_grade === 'B' ? 'bg-blue-500' :
+                        facility.score?.ofs_grade === 'C' || facility.ofs_grade === 'C' ? 'bg-amber-500' :
+                        facility.score?.ofs_grade === 'D' || facility.ofs_grade === 'D' ? 'bg-orange-500' :
+                        facility.score?.ofs_grade === 'F' || facility.ofs_grade === 'F' ? 'bg-red-500' :
+                        'bg-slate-400'
+                      }`} title="Facility Score">
+                        {facility.score?.ofs_grade || facility.ofs_grade || '-'}
+                      </div>
                     </div>
+                    <div className="flex-1">
+                      <h3 className="font-medium text-slate-900">{facility.name}</h3>
+                      <div className="text-sm text-slate-500">
+                        {facility.system_name || facility.city}, {facility.state}
+                      </div>
+                    </div>
+                    {facility.job_count > 0 && (
+                      <span className="text-sm text-emerald-600">
+                        {facility.job_count} jobs
+                      </span>
+                    )}
                   </div>
-                  {facility.job_count > 0 && (
-                    <span className="text-sm text-emerald-600">
-                      {facility.job_count} jobs
-                    </span>
-                  )}
+                </Link>
+              ))
+            ) : (
+              // Placeholder data visible through light blur
+              [
+                { name: 'Sentara Norfolk General Hospital', location: 'Norfolk, VA', grade: 'A', jobs: 24 },
+                { name: 'VCU Medical Center', location: 'Richmond, VA', grade: 'A', jobs: 18 },
+                { name: 'Inova Fairfax Hospital', location: 'Falls Church, VA', grade: 'B', jobs: 31 },
+              ].map((facility, i) => (
+                <div key={i} className="p-4 rounded-lg border border-slate-100">
+                  <div className="flex items-center gap-4">
+                    <div className="flex flex-col items-center">
+                      <span className="text-[7px] text-slate-400 uppercase tracking-wider mb-0.5">Score</span>
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold ${
+                        facility.grade === 'A' ? 'bg-emerald-500' : 'bg-blue-500'
+                      }`}>
+                        {facility.grade}
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-medium text-slate-900">{facility.name}</h3>
+                      <div className="text-sm text-slate-500">{facility.location}</div>
+                    </div>
+                    <span className="text-sm text-emerald-600">{facility.jobs} jobs</span>
+                  </div>
                 </div>
-              </Link>
-            ))}
+              ))
+            )}
           </div>
         </div>
-      ) : (
-        <BlurOverlay
-          title="Top Rated Facilities"
-          description="Upgrade to see facility rankings, OFS scores, and detailed metrics."
-          showPricing
-          demoKey="dashboard"
-          showDemo
-        >
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-slate-900">Top Rated Facilities</h2>
-            </div>
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="p-4 rounded-lg border border-slate-100 flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-slate-200" />
-                  <div className="flex-1">
-                    <div className="h-5 w-40 bg-slate-200 rounded mb-1" />
-                    <div className="h-4 w-24 bg-slate-100 rounded" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </BlurOverlay>
-      )}
+      </div>
 
       {/* Two Column Bottom Section */}
       <div className="grid lg:grid-cols-2 gap-6">

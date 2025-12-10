@@ -1,8 +1,8 @@
-import { X, Play, BarChart3, GitCompare, BookOpen, Briefcase, User, LayoutDashboard } from 'lucide-react'
+import { X, Play, BarChart3, GitCompare, BookOpen, Briefcase, User, LayoutDashboard, FileText } from 'lucide-react'
 
 interface DemoModalProps {
   /** Key to select which demo content to show */
-  demoKey: 'compare' | 'dashboard' | 'trends' | 'learning' | 'applications' | 'profile'
+  demoKey: 'compare' | 'dashboard' | 'trends' | 'learning' | 'applications' | 'profile' | 'resume'
   /** Close handler */
   onClose: () => void
 }
@@ -101,6 +101,20 @@ const DEMO_CONTENT: Record<
       'Enable job alerts and notifications',
     ],
     gifPath: '/media/demos/profile-demo.gif',
+  },
+  resume: {
+    title: 'AI Resume Builder',
+    icon: FileText,
+    description:
+      'Create professional nursing resumes tailored to specific job postings with AI assistance.',
+    features: [
+      'Pre-built templates for healthcare professionals',
+      'AI-powered summary and bullet point suggestions',
+      'Automatic skills extraction from your profile',
+      'Export to PDF with professional formatting',
+      'Tailored versions for specific job postings',
+    ],
+    gifPath: '/media/demos/resume-demo.gif',
   },
 }
 

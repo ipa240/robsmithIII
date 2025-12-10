@@ -13,7 +13,7 @@ interface BlurOverlayProps {
   /** Show demo button */
   showDemo?: boolean
   /** Demo key for DemoModal content selection */
-  demoKey?: 'compare' | 'dashboard' | 'trends' | 'learning' | 'applications' | 'profile'
+  demoKey?: 'compare' | 'dashboard' | 'trends' | 'learning' | 'applications' | 'profile' | 'resume'
   /** Show pricing tiers in overlay */
   showPricing?: boolean
   /** Custom CTA button text */

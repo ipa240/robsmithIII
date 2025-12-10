@@ -1,8 +1,12 @@
 import { Link } from 'react-router-dom'
+import { useAuth } from 'react-oidc-context'
+import { useSubscription } from '../hooks/useSubscription'
+import { isAdminUnlocked } from '../hooks/useSubscription'
 import {
   Shield, DollarSign, Star, MapPin, Heart, Briefcase,
   Users, Clock, Sun, Eye, ChevronRight, Award, BarChart3,
-  Database, CheckCircle, HelpCircle
+  Database, CheckCircle, HelpCircle, Crown, Lock, Sparkles,
+  TrendingUp, ExternalLink, Activity, ShieldCheck
 } from 'lucide-react'
 
 const INDICES = [
@@ -52,6 +56,16 @@ const INDICES = [
     factors: ['Bed capacity', 'Staffing ratios', 'Readmission rates', 'Certifications']
   },
   {
+    id: 'cmsi',
+    name: 'CMS Quality',
+    abbr: 'CMSI',
+    icon: Activity,
+    color: 'pink',
+    isNew: true,
+    description: 'Official CMS Five-Star ratings for nursing homes measuring overall quality of care',
+    factors: ['Overall star rating', 'Health inspection', 'Staffing rating', 'Quality measures']
+  },
+  {
     id: 'ali',
     name: 'Amenities & Lifestyle',
     abbr: 'ALI',
@@ -70,6 +84,16 @@ const INDICES = [
     factors: ['Pay disclosure', 'Benefits clarity', 'Requirements detail', 'Schedule info']
   },
   {
+    id: 'lsi',
+    name: 'Leapfrog Safety',
+    abbr: 'LSI',
+    icon: ShieldCheck,
+    color: 'lime',
+    isNew: true,
+    description: 'Leapfrog Hospital Safety Grades measuring patient safety practices at hospitals',
+    factors: ['Safety grade (A-F)', 'Infection rates', 'Safety protocols', 'Error prevention']
+  },
+  {
     id: 'csi',
     name: 'Commute Stress',
     abbr: 'CSI',
@@ -86,6 +110,16 @@ const INDICES = [
     color: 'teal',
     description: 'Assesses community demographics and living conditions',
     factors: ['Cost of living', 'School ratings', 'Healthcare access', 'Housing market']
+  },
+  {
+    id: 'oii',
+    name: 'Opportunity Insights',
+    abbr: 'OII',
+    icon: TrendingUp,
+    color: 'sky',
+    isNew: true,
+    description: 'Measures economic mobility and long-term opportunity potential based on Census Bureau research',
+    factors: ['Upward mobility rates', 'Income potential', 'Educational outcomes', 'Economic stability']
   },
   {
     id: 'cci',
@@ -115,14 +149,18 @@ const GRADE_SCALE = [
 ]
 
 const DATA_SOURCES = [
-  { name: 'Bureau of Labor Statistics', type: 'Salary Data' },
-  { name: 'CMS HCAHPS', type: 'Patient Experience' },
-  { name: 'FBI Crime Statistics', type: 'Safety Data' },
+  { name: 'Bureau of Labor Statistics', type: 'Salary Data', url: 'https://www.bls.gov/' },
+  { name: 'CMS Five-Star', type: 'Nursing Home Quality', url: 'https://data.cms.gov/', highlight: true },
+  { name: 'Leapfrog Safety Grades', type: 'Hospital Safety', url: 'https://www.hospitalsafetygrade.org/', highlight: true },
+  { name: 'CMS HCAHPS', type: 'Patient Experience', url: 'https://www.cms.gov/Medicare/Quality-Initiatives-Patient-Assessment-Instruments/HospitalQualityInits/HospitalHCAHPS' },
+  { name: 'FBI Crime Statistics', type: 'Safety Data', url: 'https://crime-data-explorer.fr.cloud.gov/' },
   { name: 'Employee Review Platforms', type: 'Workplace Culture' },
-  { name: 'Census Bureau', type: 'Demographics' },
-  { name: 'Virginia Health Department', type: 'Facility Data' },
+  { name: 'Census Bureau', type: 'Demographics', url: 'https://www.census.gov/' },
+  { name: 'Virginia Health Department', type: 'Facility Data', url: 'https://www.vdh.virginia.gov/' },
   { name: 'Job Posting Analysis', type: 'Transparency' },
   { name: 'Traffic & Transit APIs', type: 'Commute Data' },
+  { name: 'Opportunity Atlas', type: 'Economic Mobility', url: 'https://www.opportunityatlas.org/' },
+  { name: 'NOAA Weather Data', type: 'Climate Patterns', url: 'https://www.noaa.gov/' },
 ]
 
 const FAQ = [
@@ -140,13 +178,53 @@ const FAQ = [
   },
   {
     q: 'Are the exact formulas public?',
-    a: 'To maintain scoring integrity and prevent gaming, exact weightings are proprietary. We disclose the factors considered for transparency.'
+    a: 'To maintain scoring integrity and prevent gaming, our scoring methodology is proprietary. We disclose the factors considered for transparency.'
   },
 ]
 
 export default function Scoring() {
+  const auth = useAuth()
+  const { isPaid } = useSubscription()
+  const showUpgradePrompt = !auth.isAuthenticated || !isPaid
+
   return (
     <div className="space-y-12">
+      {/* Upgrade Banner for Free Users */}
+      {showUpgradePrompt && (
+        <div className="bg-gradient-to-r from-primary-600 to-accent-600 rounded-xl p-6 text-white">
+          <div className="flex flex-col md:flex-row items-center gap-4">
+            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+              <Crown className="w-6 h-6" />
+            </div>
+            <div className="flex-1 text-center md:text-left">
+              <h3 className="font-bold text-lg">Unlock All Facility Scores</h3>
+              <p className="text-primary-100 text-sm">
+                Starting at only <span className="font-semibold text-white">$9/month</span> · Built by a nurse, for nurses
+              </p>
+            </div>
+            <div className="flex gap-3">
+              {(!auth.isAuthenticated && !isAdminUnlocked()) ? (
+                <button
+                  onClick={() => auth.signinRedirect()}
+                  className="px-6 py-2.5 bg-white text-primary-600 rounded-lg font-semibold hover:bg-primary-50 flex items-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Create Free Account
+                </button>
+              ) : (
+                <Link
+                  to="/billing"
+                  className="px-6 py-2.5 bg-white text-primary-600 rounded-lg font-semibold hover:bg-primary-50 flex items-center gap-2"
+                >
+                  <Crown className="w-4 h-4" />
+                  Upgrade Now
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Hero */}
       <div className="relative bg-gradient-to-br from-primary-600 to-accent-600 rounded-2xl p-8 md:p-12 text-white overflow-hidden">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml,...')] opacity-10" />
@@ -161,7 +239,7 @@ export default function Scoring() {
             The VANurses Scoring System
           </h1>
           <p className="text-lg text-primary-100 mb-6">
-            We analyze <strong>10 key dimensions</strong> of what makes a nursing workplace
+            We analyze <strong>13 key dimensions</strong> of what makes a nursing workplace
             exceptional. Each facility receives a grade from A+ to F based on our
             comprehensive, data-driven analysis.
           </p>
@@ -213,9 +291,12 @@ export default function Scoring() {
               orange: 'bg-orange-100 text-orange-700',
               teal: 'bg-teal-100 text-teal-700',
               yellow: 'bg-yellow-100 text-yellow-700',
+              sky: 'bg-sky-100 text-sky-700',
+              pink: 'bg-pink-100 text-pink-700',
+              lime: 'bg-lime-100 text-lime-700',
             }
             return (
-              <div key={idx.id} className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-shadow">
+              <div key={idx.id} className={`bg-white rounded-xl border p-5 hover:shadow-md transition-shadow ${(idx as any).isNew ? 'border-sky-300 ring-1 ring-sky-200' : 'border-slate-200'}`}>
                 <div className="flex items-start gap-4">
                   <div className={`p-3 rounded-lg ${colorMap[idx.color]}`}>
                     <Icon className="w-5 h-5" />
@@ -224,6 +305,9 @@ export default function Scoring() {
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="font-semibold text-slate-900">{idx.name}</h3>
                       <span className="text-xs px-2 py-0.5 bg-slate-100 rounded text-slate-500">{idx.abbr}</span>
+                      {(idx as any).isNew && (
+                        <span className="text-xs px-2 py-0.5 bg-sky-500 text-white rounded font-medium">NEW</span>
+                      )}
                     </div>
                     <p className="text-sm text-slate-600 mb-3">{idx.description}</p>
                     <div className="flex flex-wrap gap-2">
@@ -251,15 +335,39 @@ export default function Scoring() {
           We aggregate data from trusted government sources, official healthcare databases,
           and reputable third-party platforms to ensure accuracy and objectivity.
         </p>
-        <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4">
-          {DATA_SOURCES.map(src => (
-            <div key={src.name} className="bg-slate-800 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <CheckCircle className="w-4 h-4 text-emerald-400" />
-                <span className="text-sm font-medium">{src.name}</span>
+        <div className="grid sm:grid-cols-2 md:grid-cols-5 gap-4">
+          {DATA_SOURCES.map((src: any) => (
+            src.url ? (
+              <a
+                key={src.name}
+                href={src.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`rounded-lg p-4 hover:scale-105 transition-transform ${
+                  src.highlight
+                    ? 'bg-gradient-to-br from-sky-600 to-primary-600 ring-2 ring-sky-400'
+                    : 'bg-slate-800 hover:bg-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <CheckCircle className={`w-4 h-4 ${src.highlight ? 'text-white' : 'text-emerald-400'}`} />
+                  <span className="text-sm font-medium">{src.name}</span>
+                  <ExternalLink className="w-3 h-3 text-slate-400" />
+                </div>
+                <span className={`text-xs ${src.highlight ? 'text-sky-100' : 'text-slate-400'}`}>{src.type}</span>
+                {src.highlight && (
+                  <span className="block text-[10px] text-sky-200 mt-1">NEW - Census Bureau Partnership</span>
+                )}
+              </a>
+            ) : (
+              <div key={src.name} className="bg-slate-800 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <CheckCircle className="w-4 h-4 text-emerald-400" />
+                  <span className="text-sm font-medium">{src.name}</span>
+                </div>
+                <span className="text-xs text-slate-400">{src.type}</span>
               </div>
-              <span className="text-xs text-slate-400">{src.type}</span>
-            </div>
+            )
           ))}
         </div>
       </div>

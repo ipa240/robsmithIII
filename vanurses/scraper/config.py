@@ -7,7 +7,7 @@ DB_CONFIG = {
     'dbname': 'vanurses',
     'user': 'vanurses_app',
     'password': 'VaNurses2025Secure',
-    'host': 'localhost',
+    'host': '192.168.0.150',
     'port': 5432
 }
 
@@ -54,6 +54,12 @@ WORKDAY_SYSTEMS = {
         'base_url': 'https://marywashingtonhealthcare.wd5.myworkdayjobs.com',
         'api_path': '/wday/cxs/marywashingtonhealthcare/Externalcareers/jobs',
         'facilities': 2,
+    },
+    'vhchealth': {
+        'name': 'VHC Health',  # Matches DB system_name
+        'base_url': 'https://vhchealth.wd1.myworkdayjobs.com',
+        'api_path': '/wday/cxs/vhchealth/VHCHealth/jobs',
+        'facilities': 1,
     },
 }
 

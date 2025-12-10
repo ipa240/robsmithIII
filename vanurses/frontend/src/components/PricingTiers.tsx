@@ -1,4 +1,4 @@
-import { Check, Crown, Star, Zap, Building2 } from 'lucide-react'
+import { Check, Crown, Star, Zap, Building2, Heart } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useSubscription } from '../hooks/useSubscription'
 
@@ -28,6 +28,25 @@ const TIERS = [
     ],
     cta: 'Current Plan',
     color: 'slate',
+  },
+  {
+    id: 'facilities',
+    name: 'Facilities',
+    price: '$5',
+    period: '/month',
+    icon: Heart,
+    description: 'Research nursing homes & hospitals for loved ones',
+    features: [
+      'All 387 facility scores',
+      'CMS Five-Star ratings',
+      'Leapfrog Safety Grades',
+      'Compare 3 facilities',
+      'Interactive map view',
+      '3 Sully AI questions/day',
+    ],
+    cta: 'Start Research',
+    color: 'rose',
+    tagline: 'For Families',
   },
   {
     id: 'starter',
@@ -66,6 +85,7 @@ const TIERS = [
     cta: 'Upgrade',
     color: 'primary',
     popular: true,
+    tagline: 'Best Value',
   },
   {
     id: 'premium',
@@ -99,11 +119,11 @@ export default function PricingTiers({
     : TIERS
 
   if (compact) {
-    // Compact version for overlays - just show 3 paid tiers
+    // Compact version for overlays - show paid tiers
     const paidTiers = TIERS.filter((t) => t.id !== 'free')
 
     return (
-      <div className="grid grid-cols-3 gap-3 text-left">
+      <div className="grid grid-cols-4 gap-3 text-left">
         {paidTiers.map((tier) => {
           const Icon = tier.icon
           const isHighlighted =
@@ -154,7 +174,7 @@ export default function PricingTiers({
 
   // Full version
   return (
-    <div className="grid md:grid-cols-4 gap-4">
+    <div className="grid md:grid-cols-5 gap-4">
       {displayTiers.map((tier) => {
         const Icon = tier.icon
         const isHighlighted =
@@ -166,6 +186,11 @@ export default function PricingTiers({
             bg: 'bg-slate-50',
             text: 'text-slate-600',
             border: 'border-slate-200',
+          },
+          rose: {
+            bg: 'bg-rose-50',
+            text: 'text-rose-600',
+            border: 'border-rose-200',
           },
           blue: {
             bg: 'bg-blue-50',
@@ -195,7 +220,13 @@ export default function PricingTiers({
                 : 'border-slate-200 bg-white'
             } ${isCurrent ? 'ring-2 ring-green-500 ring-offset-2' : ''}`}
           >
-            {tier.popular && (
+            {'tagline' in tier && tier.tagline ? (
+              <div className={`absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 text-white text-xs font-semibold rounded-full ${
+                tier.id === 'facilities' ? 'bg-rose-500' : 'bg-primary-600'
+              }`}>
+                {tier.tagline}
+              </div>
+            ) : tier.popular && (
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-primary-600 text-white text-xs font-semibold rounded-full">
                 Most Popular
               </div>

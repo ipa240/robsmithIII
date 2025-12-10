@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import { api, setAuthToken } from '../api/client'
 
-// OFS Index definitions
+// OFS Index definitions (10 total indices)
 const OFS_INDICES = [
   { code: 'pci', title: 'Pay & Compensation', desc: 'Competitive salary importance' },
   { code: 'ali', title: 'Amenities & Lifestyle', desc: 'Nearby dining, shopping, gyms' },
@@ -18,6 +18,8 @@ const OFS_INDICES = [
   { code: 'qli', title: 'Quality of Life', desc: 'Community livability' },
   { code: 'pei', title: 'Patient Experience', desc: 'Patient satisfaction scores' },
   { code: 'fsi', title: 'Facility Quality', desc: 'Facility ratings & services' },
+  { code: 'eri', title: 'Employee Reviews', desc: 'Nurse satisfaction ratings' },
+  { code: 'jti', title: 'Job Transparency', desc: 'Clear job posting details' },
 ]
 
 const TIER_LIMITS: Record<string, number> = {

@@ -1,19 +1,30 @@
 #!/usr/bin/env python3
 """
 Calculate Overall Facility Score (OFS) for Virginia healthcare facilities.
-Combines all 8 indices into a single weighted score.
+Combines all 13 indices into a single weighted score.
 
 Module 10: Overall Facility Score
 
-Index Weights:
-- PCI (Pay Competitiveness): 20%
-- PEI (Patient Experience): 15%
-- FSI (Facility Statistics): 15%
-- LSSI (Location Safety): 15%
-- ALI (Amenities & Lifestyle): 10%
-- CSI (Commute Stress): 10%
-- QLI (Quality of Life): 10%
-- CCI (Climate Comfort): 5%
+Index Weights (total 100%) - 13 indices:
+- PCI (Pay Competitiveness): 15%
+- ERI (Employee Reviews): 12%
+- LSSI (Location Safety): 10%
+- PEI (Patient Experience): 10%
+- FSI (Facility Statistics): 10%
+- CMSI (CMS Quality - nursing homes): 8%
+- ALI (Amenities & Lifestyle): 8%
+- JTI (Job Transparency): 7%
+- LSI (Leapfrog Safety - hospitals): 6%
+- CSI (Commute Stress): 5%
+- QLI (Quality of Life): 5%
+- OII (Opportunity Insights): 4%
+- CCI (Climate Comfort): 3%
+
+Data Sources:
+- CMS Five-Star (nursing homes) - cms.gov
+- Leapfrog Safety Grades (hospitals) - hospitalsafetygrade.org
+- Opportunity Atlas (opportunityatlas.org) - Economic mobility data
+- BLS, CMS HCAHPS, FBI Crime Stats, Census Bureau, etc.
 """
 
 import psycopg2
@@ -26,17 +37,21 @@ DB_CONFIG = {
     'password': 'VaNurses2025Secure'
 }
 
-# Index weights (must sum to 1.0)
+# Index weights (must sum to 1.0) - 13 indices total
 WEIGHTS = {
-    'pci': 0.18,   # Pay - most important for job seekers
-    'eri': 0.15,   # Employee Reviews - what employees say
-    'pei': 0.12,   # Patient Experience - work environment quality
-    'fsi': 0.12,   # Facility Stats - hospital resources/quality
-    'lssi': 0.13,  # Safety - personal safety matters
-    'ali': 0.10,   # Amenities - work-life balance
-    'csi': 0.08,   # Commute - daily quality of life
-    'qli': 0.08,   # Quality of Life - community factors
-    'cci': 0.04,   # Climate - nice to have
+    'pci': 0.15,   # Pay - most important for job seekers
+    'eri': 0.12,   # Employee Reviews - what employees say
+    'lssi': 0.10,  # Location Safety - personal safety matters
+    'pei': 0.10,   # Patient Experience - work environment quality
+    'fsi': 0.10,   # Facility Stats - hospital resources/quality
+    'cmsi': 0.08,  # CMS Quality (nursing homes) - government rating
+    'ali': 0.08,   # Amenities - work-life balance
+    'jti': 0.07,   # Job Transparency - how clear are job postings
+    'lsi': 0.06,   # Leapfrog Safety (hospitals) - third-party safety rating
+    'csi': 0.05,   # Commute - daily quality of life
+    'qli': 0.05,   # Quality of Life - community factors
+    'oii': 0.04,   # Opportunity Insights - economic mobility
+    'cci': 0.03,   # Climate - nice to have
 }
 
 DEFAULT_SCORE = 50  # Used when index is missing
@@ -72,12 +87,13 @@ def main():
     cursor = conn.cursor()
 
     try:
-        # Get all facilities with their index scores
+        # Get all facilities with their index scores (all 13 indices)
         cursor.execute("""
             SELECT
                 f.id,
                 f.name,
                 f.city,
+                f.facility_type,
                 fpd.pci_score,
                 fpe.pei_score,
                 fs.fsi_score,
@@ -86,7 +102,11 @@ def main():
                 fcd.csi_score,
                 fd.qli_score,
                 fwd.cci_score,
-                fsc.eri_score
+                fsc.eri_score,
+                fsc.jti_score,
+                fod.oii_score,
+                fsc.cmsi_score,
+                fsc.lsi_score
             FROM facilities f
             LEFT JOIN facility_pay_data fpd ON f.id = fpd.facility_id
             LEFT JOIN facility_patient_experience fpe ON f.id = fpe.facility_id
@@ -97,6 +117,7 @@ def main():
             LEFT JOIN facility_demographics fd ON f.id = fd.facility_id
             LEFT JOIN facility_weather_data fwd ON f.id = fwd.facility_id
             LEFT JOIN facility_scores fsc ON f.id = fsc.facility_id
+            LEFT JOIN facility_opportunity_data fod ON f.id = fod.facility_id
             WHERE f.state IN ('VA', 'Virginia')
             ORDER BY f.name
         """)
@@ -108,18 +129,22 @@ def main():
         results = []
 
         for row in facilities:
-            fac_id, name, city = row[0], row[1], row[2]
+            fac_id, name, city, facility_type = row[0], row[1], row[2], row[3]
 
             scores = {
-                'pci': row[3],
-                'pei': row[4],
-                'fsi': row[5],
-                'lssi': row[6],
-                'ali': row[7],
-                'csi': row[8],
-                'qli': row[9],
-                'cci': row[10],
-                'eri': row[11],
+                'pci': row[4],
+                'pei': row[5],
+                'fsi': row[6],
+                'lssi': row[7],
+                'ali': row[8],
+                'csi': row[9],
+                'qli': row[10],
+                'cci': row[11],
+                'eri': row[12],
+                'jti': row[13],
+                'oii': row[14],
+                'cmsi': row[15],  # CMS Quality (nursing homes)
+                'lsi': row[16],   # Leapfrog Safety (hospitals)
             }
 
             # Count available indices
@@ -156,7 +181,7 @@ def main():
             }
             results.append(result)
 
-            print(f"[{len(results):2d}] {name[:42]:<42} OFS: {ofs_score:3d} ({ofs_grade}) [{available}/9 indices]")
+            print(f"[{len(results):2d}] {name[:42]:<42} OFS: {ofs_score:3d} ({ofs_grade}) [{available}/13 indices]")
 
         print()
         print("Updating database...")
@@ -166,11 +191,13 @@ def main():
                 INSERT INTO facility_scores
                     (facility_id, pci_score, pei_score, fsi_score, ali_score,
                      csi_score, cci_score, lssi_score, qli_score, eri_score,
+                     jti_score, oii_score, cmsi_score, lsi_score,
                      ofs_score, ofs_grade,
                      pci_weighted, pei_weighted, fsi_weighted, ali_weighted,
                      csi_weighted, cci_weighted, lssi_weighted, qli_weighted, eri_weighted,
+                     jti_weighted, oii_weighted, cmsi_weighted, lsi_weighted,
                      indices_available, calculation_notes, calculated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
                 ON CONFLICT (facility_id) DO UPDATE SET
                     pci_score = EXCLUDED.pci_score,
                     pei_score = EXCLUDED.pei_score,
@@ -181,6 +208,10 @@ def main():
                     lssi_score = EXCLUDED.lssi_score,
                     qli_score = EXCLUDED.qli_score,
                     eri_score = EXCLUDED.eri_score,
+                    jti_score = EXCLUDED.jti_score,
+                    oii_score = EXCLUDED.oii_score,
+                    cmsi_score = EXCLUDED.cmsi_score,
+                    lsi_score = EXCLUDED.lsi_score,
                     ofs_score = EXCLUDED.ofs_score,
                     ofs_grade = EXCLUDED.ofs_grade,
                     pci_weighted = EXCLUDED.pci_weighted,
@@ -192,6 +223,10 @@ def main():
                     lssi_weighted = EXCLUDED.lssi_weighted,
                     qli_weighted = EXCLUDED.qli_weighted,
                     eri_weighted = EXCLUDED.eri_weighted,
+                    jti_weighted = EXCLUDED.jti_weighted,
+                    oii_weighted = EXCLUDED.oii_weighted,
+                    cmsi_weighted = EXCLUDED.cmsi_weighted,
+                    lsi_weighted = EXCLUDED.lsi_weighted,
                     indices_available = EXCLUDED.indices_available,
                     calculation_notes = EXCLUDED.calculation_notes,
                     calculated_at = now()
@@ -200,10 +235,12 @@ def main():
                 r['scores']['pci'], r['scores']['pei'], r['scores']['fsi'],
                 r['scores']['ali'], r['scores']['csi'], r['scores']['cci'],
                 r['scores']['lssi'], r['scores']['qli'], r['scores']['eri'],
+                r['scores']['jti'], r['scores']['oii'], r['scores']['cmsi'], r['scores']['lsi'],
                 r['ofs_score'], r['ofs_grade'],
                 r['weighted']['pci'], r['weighted']['pei'], r['weighted']['fsi'],
                 r['weighted']['ali'], r['weighted']['csi'], r['weighted']['cci'],
                 r['weighted']['lssi'], r['weighted']['qli'], r['weighted']['eri'],
+                r['weighted']['jti'], r['weighted']['oii'], r['weighted']['cmsi'], r['weighted']['lsi'],
                 r['available'], r['notes']
             ))
 

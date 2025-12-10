@@ -554,3 +554,270 @@ async def get_search_modes():
         ],
         "default": "internal"
     }
+
+
+class JobOpinionRequest(BaseModel):
+    job_id: str
+    job_title: str
+    facility_name: Optional[str] = None
+    city: Optional[str] = None
+    specialty: Optional[str] = None
+    nursing_type: Optional[str] = None
+    shift_type: Optional[str] = None
+    employment_type: Optional[str] = None
+    mood: str = "optimistic"
+
+
+# Mood prompts for job opinions
+JOB_OPINION_PROMPTS = {
+    "optimistic": """You are Sully, a warm and encouraging AI nursing career advisor for VANurses.net.
+Your job is to give a brief, personalized opinion on whether this job is a good match for the user based on their preferences.
+
+PERSONALITY: Friendly, supportive, uses occasional emojis. You find the positives and encourage them!
+
+RESPONSE FORMAT:
+- Keep it to 2-3 sentences max
+- Be encouraging and find the bright side
+- If it's a great match, say so enthusiastically!
+- If there are concerns, frame them as opportunities
+- Use occasional emojis to be friendly""",
+
+    "neutral": """You are Sully, a professional AI nursing career advisor for VANurses.net.
+Your job is to give a brief, personalized opinion on whether this job is a good match for the user based on their preferences.
+
+PERSONALITY: Balanced, factual, objective. You present the pros and cons clearly.
+
+RESPONSE FORMAT:
+- Keep it to 2-3 sentences max
+- Be objective and balanced
+- State both positives and concerns clearly
+- No emotional language, just facts""",
+
+    "stern": """You are Sully, a direct and no-nonsense AI nursing career advisor for VANurses.net.
+Your job is to give a brief, personalized opinion on whether this job is a good match for the user based on their preferences.
+
+PERSONALITY: Blunt, direct, tells it like it is. You can use mild language (damn, hell) occasionally.
+
+RESPONSE FORMAT:
+- Keep it to 2-3 sentences max
+- Be direct and don't sugarcoat
+- Point out potential red flags clearly
+- Give real talk, not corporate fluff""",
+
+    "nofilter": """You are Sully, a veteran ICU nurse turned AI career advisor for VANurses.net.
+Your job is to give a brief, personalized opinion on whether this job is a good match for the user based on their preferences.
+
+PERSONALITY: Brutally honest, talk like a real nurse giving advice after a long shift. You can use mild profanity (damn, hell, crap) but keep it work-appropriate.
+
+RESPONSE FORMAT:
+- Keep it to 2-3 sentences max
+- Tell them the truth, no BS
+- Call out any red flags bluntly
+- Talk like a real nurse would to a colleague"""
+}
+
+
+@router.post("/job-opinion")
+async def get_job_opinion(
+    request: JobOpinionRequest,
+    db: Session = Depends(get_db),
+    current_user: Optional[CurrentUser] = Depends(get_current_user_optional)
+):
+    """Get Sully's personalized opinion on a job based on user's profile and preferences"""
+
+    # Get user from token
+    user = await get_user_from_token(current_user, db)
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Please sign in to get Sully's opinion")
+
+    user_id = str(user["id"])
+    tier = user.get("tier", "free") or "free"
+    tier_config = TIER_LIMITS.get(tier, TIER_LIMITS["free"])
+
+    # Validate mood
+    mood = request.mood.lower()
+    if mood not in JOB_OPINION_PROMPTS:
+        mood = "optimistic"
+
+    # Check if nofilter is allowed for this tier
+    if mood == "nofilter" and not tier_config["nofilter_allowed"]:
+        raise HTTPException(
+            status_code=403,
+            detail="No Filter mode requires a Pro subscription or higher. Upgrade to unlock unfiltered Sully!"
+        )
+
+    # Get user's onboarding preferences
+    preferences = db.execute(
+        text("""
+            SELECT
+                specialties, employment_types, shift_preferences,
+                locations, desired_salary_min, desired_salary_max,
+                certifications, experience_years, nursing_types,
+                career_goals, work_environment_prefs
+            FROM user_onboarding
+            WHERE user_id = :user_id
+        """),
+        {"user_id": user_id}
+    ).first()
+
+    # Get user profile data
+    user_profile = db.execute(
+        text("""
+            SELECT first_name, last_name, email, tier
+            FROM users
+            WHERE id = :user_id
+        """),
+        {"user_id": user_id}
+    ).first()
+
+    # Get comprehensive facility data if we have the facility
+    facility_data = None
+    if request.facility_name:
+        facility_data = db.execute(
+            text("""
+                SELECT
+                    f.id, f.name, f.city, f.state, f.region, f.system_name,
+                    f.bed_count, f.hospital_type,
+                    fs.ofs_score, fs.ofs_grade,
+                    fs.pci_score, fs.ali_score, fs.csi_score, fs.cci_score,
+                    fs.lssi_score, fs.qli_score, fs.pei_score, fs.fsi_score,
+                    (SELECT COUNT(*) FROM jobs j WHERE j.facility_id = f.id AND j.is_active = true) as open_jobs
+                FROM facilities f
+                LEFT JOIN facility_scores fs ON f.id = fs.facility_id
+                WHERE LOWER(f.name) LIKE :name
+                LIMIT 1
+            """),
+            {"name": f"%{request.facility_name.lower()}%"}
+        ).first()
+
+    # Get job pay info
+    job_pay_data = db.execute(
+        text("""
+            SELECT pay_min, pay_max, pay_disclosed, sign_on_bonus
+            FROM jobs
+            WHERE id = :job_id
+        """),
+        {"job_id": request.job_id}
+    ).first()
+
+    # Build comprehensive context for Sully
+    job_context = f"""
+JOB DETAILS:
+- Title: {request.job_title}
+- Facility: {request.facility_name or 'Not specified'}
+- Location: {request.city or 'Not specified'}, Virginia
+- Specialty: {request.specialty or 'Not specified'}
+- Nursing Type: {request.nursing_type or 'Not specified'}
+- Shift: {request.shift_type or 'Not specified'}
+- Employment Type: {request.employment_type or 'Not specified'}
+"""
+
+    if job_pay_data:
+        pay = dict(job_pay_data._mapping)
+        if pay.get('pay_min') or pay.get('pay_max'):
+            job_context += f"- Pay: ${pay.get('pay_min', '?')}-${pay.get('pay_max', '?')}/hr\n"
+        if pay.get('sign_on_bonus'):
+            job_context += f"- Sign-On Bonus: ${pay.get('sign_on_bonus'):,.0f}\n"
+
+    if facility_data:
+        fac = dict(facility_data._mapping)
+        job_context += f"""
+FACILITY DETAILS ({fac['name']}):
+- Location: {fac['city']}, {fac['state']} ({fac.get('region') or 'Virginia'})
+- System: {fac.get('system_name') or 'Independent'}
+- Hospital Type: {fac.get('hospital_type') or 'Not specified'}
+- Bed Count: {fac.get('bed_count') or 'Not specified'}
+- Open Jobs: {fac.get('open_jobs', 0)} positions available
+
+FACILITY SCORES (Overall: {fac.get('ofs_score') or 'N/A'} - Grade {fac.get('ofs_grade') or 'N/A'}):
+"""
+        if fac.get('pci_score'):
+            job_context += f"- Patient Care Index: {fac.get('pci_score')}/100\n"
+        if fac.get('ali_score'):
+            job_context += f"- Area Livability: {fac.get('ali_score')}/100\n"
+        if fac.get('csi_score'):
+            job_context += f"- Cost of Living: {fac.get('csi_score')}/100\n"
+        if fac.get('cci_score'):
+            job_context += f"- Career Opportunity: {fac.get('cci_score')}/100\n"
+        if fac.get('qli_score'):
+            job_context += f"- Quality of Life: {fac.get('qli_score')}/100\n"
+        if fac.get('pei_score'):
+            job_context += f"- Professional Environment: {fac.get('pei_score')}/100\n"
+
+    if preferences:
+        pref = dict(preferences._mapping)
+        job_context += f"""
+USER PROFILE PREFERENCES:
+- Preferred Nursing Types: {pref.get('nursing_types') or 'Not specified'}
+- Preferred Specialties: {pref.get('specialties') or 'Not specified'}
+- Preferred Employment: {pref.get('employment_types') or 'Not specified'}
+- Preferred Shifts: {pref.get('shift_preferences') or 'Not specified'}
+- Preferred Locations/Regions: {pref.get('locations') or 'Not specified'}
+- Desired Salary: ${pref.get('desired_salary_min') or '?'} - ${pref.get('desired_salary_max') or '?'}/hr
+- Experience Level: {pref.get('experience_years') or '?'} years
+- Certifications: {pref.get('certifications') or 'Not specified'}
+- Career Goals: {pref.get('career_goals') or 'Not specified'}
+- Work Environment Preferences: {pref.get('work_environment_prefs') or 'Not specified'}
+"""
+    else:
+        job_context += "\nUSER PREFERENCES: No profile preferences set yet - recommend they complete their profile for better matching."
+
+    # Build response data for facility score
+    facility_score = None
+    if facility_data:
+        fac = dict(facility_data._mapping)
+        facility_score = {
+            "name": fac['name'],
+            "city": fac['city'],
+            "score": fac.get('ofs_score'),
+            "grade": fac.get('ofs_grade')
+        }
+
+    # Get the mood-specific prompt
+    system_prompt = JOB_OPINION_PROMPTS[mood] + """
+
+ADDITIONAL RULES:
+- Reference specific details from their preferences when relevant
+- DO NOT write long paragraphs or list every detail
+- DO NOT make up information not provided"""
+
+    # Call Ollama for the opinion
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            response = await client.post(
+                f"{OLLAMA_URL}/api/generate",
+                json={
+                    "model": OLLAMA_MODEL,
+                    "prompt": f"Based on this job and the user's preferences, give your quick opinion on whether it's a good match:\n\n{job_context}",
+                    "system": system_prompt,
+                    "stream": False,
+                    "options": {
+                        "temperature": 0.6,
+                        "top_p": 0.9,
+                        "num_predict": 200
+                    }
+                }
+            )
+            response.raise_for_status()
+            data = response.json()
+            opinion = data.get("response", "").strip()
+
+            # Clean up the response
+            opinion = opinion.replace("DATASET", "").strip()
+            opinion = re.sub(r"[--]", "", opinion)
+
+            if not opinion:
+                opinion = "This looks like an interesting opportunity! I'd need to see more details about your preferences to give you a better match assessment."
+
+    except httpx.TimeoutException:
+        opinion = "I'm taking too long to analyze this one. Try asking me again in a moment!"
+    except httpx.HTTPError:
+        opinion = "Having trouble connecting right now. Give me another shot in a few seconds!"
+    except Exception as e:
+        opinion = "Hmm, something went wrong. Try asking me again!"
+
+    return {
+        "opinion": opinion,
+        "facility_score": facility_score
+    }

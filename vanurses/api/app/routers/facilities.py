@@ -8,22 +8,22 @@ from ..database import get_db
 
 router = APIRouter(prefix="/api/facilities", tags=["facilities"])
 
-# All 10 scoring indices with weights (total 100%)
-# Note: JTI column may not exist yet - handled gracefully in queries
+# All 13 scoring indices with weights (total 100%)
 SCORE_INDICES = [
-    ("pci_score", "pci_weighted", 17),   # Pay Competitiveness Index
-    ("eri_score", "eri_weighted", 14),   # Employee Reviews Index
-    ("lssi_score", "lssi_weighted", 12), # Location Safety Index
-    ("pei_score", "pei_weighted", 11),   # Patient Experience Index
-    ("fsi_score", "fsi_weighted", 11),   # Facility Statistics Index
-    ("ali_score", "ali_weighted", 9),    # Amenities & Lifestyle Index
-    ("csi_score", "csi_weighted", 7),    # Commute Stress Index
-    ("qli_score", "qli_weighted", 7),    # Quality of Life Index
-    ("cci_score", "cci_weighted", 4),    # Climate Comfort Index
+    ("pci_score", "pci_weighted", 15),   # Pay Competitiveness Index
+    ("eri_score", "eri_weighted", 12),   # Employee Reviews Index
+    ("lssi_score", "lssi_weighted", 10), # Location Safety Index
+    ("pei_score", "pei_weighted", 10),   # Patient Experience Index
+    ("fsi_score", "fsi_weighted", 10),   # Facility Statistics Index
+    ("cmsi_score", "cmsi_weighted", 8),  # CMS Quality Index (nursing homes)
+    ("ali_score", "ali_weighted", 8),    # Amenities & Lifestyle Index
+    ("jti_score", "jti_weighted", 7),    # Job Transparency Index
+    ("lsi_score", "lsi_weighted", 6),    # Leapfrog Safety Index (hospitals)
+    ("csi_score", "csi_weighted", 5),    # Commute Stress Index
+    ("qli_score", "qli_weighted", 5),    # Quality of Life Index
+    ("oii_score", "oii_weighted", 4),    # Opportunity Insights Index
+    ("cci_score", "cci_weighted", 3),    # Climate Comfort Index
 ]
-
-# JTI is handled separately as it may not exist yet (requires migration)
-JTI_INDEX = ("jti_score", "jti_weighted", 8)  # Job Transparency Index
 
 # Index names for human display
 INDEX_NAMES = {
@@ -32,10 +32,13 @@ INDEX_NAMES = {
     "lssi": "Location Safety",
     "pei": "Patient Experience",
     "fsi": "Facility Statistics",
+    "cmsi": "CMS Quality",
     "ali": "Amenities & Lifestyle",
     "jti": "Job Transparency",
+    "lsi": "Leapfrog Safety",
     "csi": "Commute Stress",
     "qli": "Quality of Life",
+    "oii": "Opportunity Insights",
     "cci": "Climate Comfort",
 }
 
@@ -47,9 +50,6 @@ def build_score_object(row_dict: dict) -> Optional[dict]:
         for idx, weighted, _ in SCORE_INDICES:
             row_dict.pop(idx, None)
             row_dict.pop(weighted, None)
-        # Also remove JTI if present
-        row_dict.pop("jti_score", None)
-        row_dict.pop("jti_weighted", None)
         row_dict.pop("ofs_score", None)
         row_dict.pop("ofs_grade", None)
         row_dict.pop("indices_available", None)
@@ -70,16 +70,6 @@ def build_score_object(row_dict: dict) -> Optional[dict]:
             "weight_pct": weight,
             "name": INDEX_NAMES.get(idx_key, idx_key.upper())
         }
-
-    # Add JTI - may not exist in DB yet (requires migration)
-    jti_score = row_dict.pop("jti_score", None)
-    jti_weighted = row_dict.pop("jti_weighted", None)
-    score["indices"]["jti"] = {
-        "score": jti_score,
-        "weighted": float(jti_weighted or 0),
-        "weight_pct": 8,
-        "name": "Job Transparency"
-    }
 
     return score
 

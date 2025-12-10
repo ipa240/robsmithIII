@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from ..database import get_db
+from ..services.bls_data import get_all_market_rates
 
 router = APIRouter(prefix="/api/trends", tags=["trends"])
 
@@ -77,6 +78,47 @@ async def get_trends_overview(
         FROM jobs
         WHERE is_active = true AND pay_type IS NOT NULL
     """)).scalar() or 0
+
+    # Average hourly rate by nursing type (from disclosed job pay)
+    avg_hourly_by_type_results = db.execute(text("""
+        SELECT
+            nursing_type,
+            ROUND(AVG(
+                CASE
+                    WHEN pay_type = 'hourly' THEN COALESCE(pay_max, pay_min)
+                    WHEN pay_type = 'weekly' THEN COALESCE(pay_max, pay_min) / 40
+                    WHEN pay_type = 'annual' THEN COALESCE(pay_max, pay_min) / 2080
+                    ELSE NULL
+                END
+            )::numeric, 2) as avg_hourly,
+            COUNT(*) as job_count
+        FROM jobs
+        WHERE is_active = true AND pay_type IS NOT NULL AND nursing_type IS NOT NULL
+        GROUP BY nursing_type
+        ORDER BY avg_hourly DESC
+    """)).fetchall()
+
+    # Start with disclosed pay data
+    avg_hourly_by_type = {
+        r.nursing_type: {"avgHourly": float(r.avg_hourly) if r.avg_hourly else 0, "jobCount": r.job_count, "source": "disclosed"}
+        for r in avg_hourly_by_type_results
+    }
+
+    # Fill in with market rates for all standard nursing types
+    market_rates = get_all_market_rates(db)
+    all_nursing_types = ['rn', 'lpn', 'cna', 'np', 'crna', 'travel']
+    for nt in all_nursing_types:
+        if nt not in avg_hourly_by_type or avg_hourly_by_type[nt]["jobCount"] < 5:
+            # Use market rate if no disclosed pay or insufficient data
+            if nt in market_rates:
+                rate = market_rates[nt]
+                avg_hourly_by_type[nt] = {
+                    "avgHourly": rate["median"],
+                    "minHourly": rate["min"],
+                    "maxHourly": rate["max"],
+                    "jobCount": 0,
+                    "source": "market"
+                }
 
     # Average facility grade (based on OFS 100-point scale where avg is ~50)
     avg_grade = db.execute(text("""
@@ -160,6 +202,7 @@ async def get_trends_overview(
             "jobs": current_jobs,
             "jobsChange": job_change,
             "avgHourly": float(avg_hourly) if avg_hourly else 0,
+            "avgHourlyByType": avg_hourly_by_type,
             "payChange": pay_change,
             "facilities": current_facilities,
             "facilitiesChange": 0,  # Would need historical data

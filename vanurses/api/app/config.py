@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     stripe_webhook_secret: str = ""
 
     # Stripe Price IDs - Subscriptions
+    stripe_price_facilities_monthly: str = ""
+    stripe_price_facilities_yearly: str = ""
     stripe_price_starter_monthly: str = ""
     stripe_price_starter_yearly: str = ""
     stripe_price_pro_monthly: str = ""

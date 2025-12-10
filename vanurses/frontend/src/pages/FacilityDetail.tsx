@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, MapPin, Building2, Star, ExternalLink, Users, BarChart3, Lock, Crown, ChevronRight } from 'lucide-react'
 import { api, setAuthToken } from '../api/client'
 import { toTitleCase } from '../utils/format'
+import { isAdminUnlocked } from '../hooks/useSubscription'
 import ScoreGauge from '../components/scoring/ScoreGauge'
 import IndexRadar from '../components/scoring/IndexRadar'
 import IndexBreakdown from '../components/scoring/IndexBreakdown'
@@ -44,17 +45,21 @@ function getTopIndices(indices: Record<string, number>, n: number = 2) {
     .slice(0, n)
 }
 
-// Index display names
+// Index display names - all 13 OFS indices
 const INDEX_NAMES: Record<string, string> = {
   pci: 'Pay & Compensation',
-  ali: 'Amenities & Lifestyle',
-  csi: 'Commute Score',
-  cci: 'Climate & Comfort',
+  eri: 'Employee Reviews',
   lssi: 'Safety & Security',
-  qli: 'Quality of Life',
   pei: 'Patient Experience',
   fsi: 'Facility Quality',
-  eri: 'Employee Reviews',
+  cmsi: 'CMS Quality',
+  ali: 'Amenities & Lifestyle',
+  jti: 'Job Transparency',
+  lsi: 'Leapfrog Safety',
+  csi: 'Commute Score',
+  qli: 'Quality of Life',
+  oii: 'Opportunity Insights',
+  cci: 'Climate & Comfort',
 }
 
 export default function FacilityDetail() {
@@ -82,13 +87,23 @@ export default function FacilityDetail() {
     }
   }, [userData])
 
-  // Only show premium content if authenticated AND has paid tier
-  const isPaidUser = auth.isAuthenticated && ['starter', 'pro', 'premium'].includes(userTier.toLowerCase())
+  // Only show premium content if authenticated AND has paid tier OR admin unlocked
+  const isPaidUser = (auth.isAuthenticated && ['starter', 'pro', 'premium'].includes(userTier.toLowerCase())) || isAdminUnlocked()
 
   const { data: facility, isLoading } = useQuery({
     queryKey: ['facility', id],
     queryFn: () => api.get(`/api/facilities/${id}`).then(res => res.data.data)
   })
+
+  // Get top 3 facilities to check if current facility qualifies for free score view
+  const { data: topFacilities } = useQuery({
+    queryKey: ['top-facilities-for-free'],
+    queryFn: () => api.get('/api/facilities', { params: { limit: 3 } }).then(res => res.data.data)
+  })
+
+  // Check if this facility is in the top 3 (free users can see scores for first 3)
+  const isInTop3 = topFacilities?.some((f: any) => f.id === id)
+  const canSeeScore = isPaidUser || isInTop3
 
   const { data: jobs } = useQuery({
     queryKey: ['facility-jobs', id],
@@ -131,13 +146,47 @@ export default function FacilityDetail() {
         Back to Facilities
       </Link>
 
+      {/* Upgrade Banner for non-paid users */}
+      {!isPaidUser && (
+        <div className="bg-gradient-to-r from-primary-600 to-accent-600 rounded-xl p-5 text-white mb-6">
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+              <Crown className="w-5 h-5" />
+            </div>
+            <div className="flex-1 text-center sm:text-left">
+              <h3 className="font-bold">Unlock Full Facility Details</h3>
+              <p className="text-primary-100 text-sm">
+                Starting at only <span className="font-semibold text-white">$9/month</span> · Built by a nurse, for nurses
+              </p>
+            </div>
+            <Link
+              to="/billing"
+              className="px-5 py-2 bg-white text-primary-600 rounded-lg font-semibold hover:bg-primary-50 transition-colors text-sm"
+            >
+              Upgrade Now
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
         <div className="flex items-start gap-6">
           {facility.score && (
-            <div className={`w-20 h-20 rounded-xl flex flex-col items-center justify-center text-white ${getGradeColor(facility.score.ofs_grade)}`}>
-              <span className="text-3xl font-bold">{facility.score.ofs_grade}</span>
-              <span className="text-sm opacity-80">{facility.score.ofs_score ? Math.round(facility.score.ofs_score) : '-'}</span>
+            <div className="flex flex-col items-center">
+              <span className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Facility Score</span>
+              {canSeeScore ? (
+                <div className={`w-20 h-20 rounded-xl flex flex-col items-center justify-center text-white ${getGradeColor(facility.score.ofs_grade)}`}>
+                  <span className="text-3xl font-bold">{facility.score.ofs_grade}</span>
+                  <span className="text-sm opacity-80">{facility.score.ofs_score ? Math.round(facility.score.ofs_score) : '-'}</span>
+                </div>
+              ) : (
+                <div className="w-20 h-20 rounded-xl flex flex-col items-center justify-center bg-slate-100 relative" title="Upgrade to view Facility Score">
+                  <span className="text-2xl font-bold text-slate-300 blur-[4px] select-none">A+</span>
+                  <span className="text-sm text-slate-200 blur-[3px] select-none">95</span>
+                  <Lock className="absolute w-6 h-6 text-slate-400" />
+                </div>
+              )}
             </div>
           )}
 
@@ -197,7 +246,7 @@ export default function FacilityDetail() {
         <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-slate-900">Overall Facility Score (OFS)</h2>
-            {!isPaidUser && (
+            {!canSeeScore && (
               <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
                 <Crown className="w-3 h-3" />
                 Upgrade for full details
@@ -205,7 +254,7 @@ export default function FacilityDetail() {
             )}
           </div>
 
-          {isPaidUser ? (
+          {canSeeScore ? (
             /* Full scorecard for paid users */
             <div className="grid lg:grid-cols-2 gap-8">
               {/* Left: Gauge + Radar */}
@@ -231,83 +280,48 @@ export default function FacilityDetail() {
               </div>
             </div>
           ) : (
-            /* Limited preview for free users */
-            <div>
-              {/* Score gauge - visible to all */}
-              <div className="flex flex-col items-center mb-6">
-                <ScoreGauge
-                  score={facility.score.ofs_score}
-                  grade={facility.score.ofs_grade}
-                  size="lg"
-                />
-              </div>
-
-              {/* Top 2 indices - preview */}
-              <div className="mb-6">
-                <h3 className="text-sm font-medium text-slate-500 mb-4 uppercase tracking-wide">
-                  Top Performing Areas
-                </h3>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {topIndices.map(([key, score]) => (
-                    <div key={key} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium text-slate-900">{INDEX_NAMES[key] || key.toUpperCase()}</span>
-                        <span className={`text-lg font-bold ${getGradeTextColor(score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F')}`}>
-                          {Math.round(score)}
-                        </span>
-                      </div>
-                      <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${getGradeColor(score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F')}`}
-                          style={{ width: `${score}%` }}
-                        />
-                      </div>
+            /* Blurred content for free users */
+            <div className="relative">
+              {/* Blurred preview showing all 10 indices */}
+              <div className="blur-sm opacity-50 pointer-events-none select-none">
+                <div className="grid lg:grid-cols-2 gap-8">
+                  <div className="flex flex-col items-center gap-6">
+                    <div className="w-48 h-48 bg-slate-100 rounded-full flex items-center justify-center">
+                      <span className="text-4xl font-bold text-slate-300">A+</span>
                     </div>
-                  ))}
-                </div>
-                {/* Job Transparency - included with other indices */}
-                <div className="mt-4">
-                  <JTICard data={transparency} loading={transparencyLoading} compact />
+                    <div className="w-64 h-64 bg-slate-100 rounded-lg" />
+                  </div>
+                  <div className="space-y-3">
+                    {/* 13 index placeholders */}
+                    {['Pay & Compensation', 'Employee Reviews', 'Safety & Security', 'Patient Experience', 'Facility Quality', 'CMS Quality', 'Amenities & Lifestyle', 'Job Transparency', 'Leapfrog Safety', 'Commute Score', 'Quality of Life', 'Opportunity Insights', 'Climate & Comfort'].map((name, i) => (
+                      <div key={i} className="h-10 bg-slate-100 rounded-lg flex items-center px-4">
+                        <span className="text-slate-400 text-sm">{name}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* Upgrade CTA */}
-              <div className="relative">
-                {/* Blurred preview of full content */}
-                <div className="blur-sm opacity-50 pointer-events-none">
-                  <div className="grid lg:grid-cols-2 gap-8">
-                    <div className="flex flex-col items-center">
-                      <div className="w-64 h-64 bg-slate-100 rounded-full" />
-                    </div>
-                    <div className="space-y-3">
-                      {[1, 2, 3, 4, 5, 6].map(i => (
-                        <div key={i} className="h-12 bg-slate-100 rounded-lg" />
-                      ))}
-                    </div>
+              {/* Overlay */}
+              <div className="absolute inset-0 bg-gradient-to-t from-white via-white/90 to-white/70 flex items-center justify-center">
+                <div className="text-center p-6">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary-100 text-primary-600 mb-3">
+                    <Lock className="w-6 h-6" />
                   </div>
-                </div>
-
-                {/* Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-white via-white/95 to-transparent flex items-center justify-center">
-                  <div className="text-center p-6">
-                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary-100 text-primary-600 mb-3">
-                      <Lock className="w-6 h-6" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                      Unlock Full Score Breakdown
-                    </h3>
-                    <p className="text-slate-600 mb-4 max-w-md">
-                      See all 8 indices, radar chart visualization, and detailed explanations for each score component.
-                    </p>
-                    <Link
-                      to="/billing"
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-                    >
-                      <Crown className="w-4 h-4" />
-                      Upgrade to Starter
-                      <ChevronRight className="w-4 h-4" />
-                    </Link>
-                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                    Unlock Facility Score
+                  </h3>
+                  <p className="text-slate-600 mb-4 max-w-md">
+                    See the OFS grade and all 13 scoring indices including Pay, Reviews, Safety, Patient Experience, Facility Quality, CMS Quality, Leapfrog Safety, Amenities, Transparency, Commute, Quality of Life, Opportunity Insights, and Climate.
+                  </p>
+                  <Link
+                    to="/billing"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    <Crown className="w-4 h-4" />
+                    Upgrade to Starter
+                    <ChevronRight className="w-4 h-4" />
+                  </Link>
                 </div>
               </div>
             </div>
@@ -402,16 +416,23 @@ export default function FacilityDetail() {
         </div>
       )}
 
-      {/* Open Jobs - visible to all */}
+      {/* Open Jobs - blurred for non-paid users after first 2 */}
       {jobs && jobs.length > 0 && (
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-slate-900">
               Open Positions ({jobs.length})
             </h2>
+            {!isPaidUser && jobs.length > 2 && (
+              <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded flex items-center gap-1">
+                <Lock className="w-3 h-3" />
+                {jobs.length - 2} more locked
+              </span>
+            )}
           </div>
           <div className="space-y-3">
-            {jobs.slice(0, 5).map((job: any) => (
+            {/* Show first 2 jobs for everyone */}
+            {jobs.slice(0, isPaidUser ? 5 : 2).map((job: any) => (
               <Link
                 key={job.id}
                 to={`/jobs/${job.id}`}
@@ -433,7 +454,52 @@ export default function FacilityDetail() {
                 </div>
               </Link>
             ))}
-            {jobs.length > 5 && (
+
+            {/* Show blurred sample jobs for non-paid users */}
+            {!isPaidUser && jobs.length > 2 && (
+              <div className="relative">
+                <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] z-10 rounded-lg flex flex-col items-center justify-center">
+                  <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center mb-2">
+                    <Lock className="w-5 h-5 text-slate-400" />
+                  </div>
+                  <span className="text-xs text-slate-500 bg-white/80 px-2 py-1 rounded mb-2">Sample Data</span>
+                  <Link
+                    to="/billing"
+                    className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                  >
+                    <Crown className="w-3 h-3" />
+                    Upgrade to view all
+                  </Link>
+                </div>
+                <div className="space-y-3 opacity-60">
+                  {[
+                    { title: 'Registered Nurse - ICU', type: 'RN', shift: 'Night', pay: 48 },
+                    { title: 'Staff Nurse - Med/Surg', type: 'RN', shift: 'Day', pay: 42 },
+                    { title: 'Charge Nurse - ER', type: 'RN', shift: 'Rotating', pay: 52 },
+                  ].slice(0, Math.min(3, jobs.length - 2)).map((sample, idx) => (
+                    <div
+                      key={idx}
+                      className="block p-4 rounded-lg border border-slate-100 bg-slate-50"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-medium text-slate-700">{sample.title}</h3>
+                          <div className="flex gap-2 mt-1 text-sm text-slate-400">
+                            <span>{sample.type}</span>
+                            <span>• {sample.shift}</span>
+                          </div>
+                        </div>
+                        <span className="text-slate-400 font-medium">
+                          ${sample.pay}/hr
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {isPaidUser && jobs.length > 5 && (
               <Link
                 to={`/jobs?facility=${id}`}
                 className="block text-center text-primary-600 hover:underline py-2"

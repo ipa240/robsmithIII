@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   HelpCircle, MessageSquare, Send, ChevronDown, ChevronUp,
-  Mail, Phone, Clock, CheckCircle, AlertCircle, ExternalLink
+  Mail, Clock, CheckCircle, AlertCircle, ExternalLink, Key, Lock, Unlock
 } from 'lucide-react'
 import { api } from '../api/client'
+import { unlockAdmin, lockAdmin, isAdminUnlocked } from '../hooks/useSubscription'
 
 interface FAQ {
   question: string
@@ -71,6 +72,9 @@ export default function Support() {
     category: 'general'
   })
   const [submitSuccess, setSubmitSuccess] = useState(false)
+  const [adminCode, setAdminCode] = useState('')
+  const [adminError, setAdminError] = useState('')
+  const [adminUnlocked] = useState(() => isAdminUnlocked())
 
   const { data: tickets } = useQuery<Ticket[]>({
     queryKey: ['support-tickets'],
@@ -210,6 +214,7 @@ export default function Support() {
               <option value="technical">Technical Issue</option>
               <option value="feature">Feature Request</option>
               <option value="data">Data & Scoring Question</option>
+              <option value="hr">HR / Recruiter Inquiry</option>
             </select>
           </div>
 
@@ -277,6 +282,58 @@ export default function Support() {
           </div>
         </div>
       )}
+
+      {/* Staff Section */}
+      <div className="bg-slate-50 rounded-xl border border-slate-200 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Key className="w-4 h-4 text-slate-400" />
+          <span className="text-sm font-medium text-slate-600">Staff</span>
+        </div>
+
+        {adminUnlocked ? (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-emerald-600">
+              <Unlock className="w-4 h-4" />
+              <span className="text-sm font-medium">Active</span>
+            </div>
+            <button
+              onClick={() => lockAdmin()}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 text-slate-600 text-sm rounded-lg hover:bg-slate-300 transition-colors"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              Deactivate
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={adminCode}
+              onChange={(e) => { setAdminCode(e.target.value); setAdminError('') }}
+              placeholder="Code..."
+              className="flex-1 text-sm px-3 py-1.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  unlockAdmin(adminCode).then(success => {
+                    if (!success) setAdminError('Invalid')
+                  })
+                }
+              }}
+            />
+            <button
+              onClick={() => {
+                unlockAdmin(adminCode).then(success => {
+                  if (!success) setAdminError('Invalid')
+                })
+              }}
+              className="px-4 py-1.5 bg-slate-600 text-white text-sm rounded-lg hover:bg-slate-700 transition-colors"
+            >
+              Go
+            </button>
+          </div>
+        )}
+        {adminError && <p className="text-xs text-red-500 mt-2">{adminError}</p>}
+      </div>
 
       {/* Status Page Link */}
       <div className="text-center py-4">

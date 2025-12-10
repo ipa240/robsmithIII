@@ -4,8 +4,20 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import uuid
+import json
+from datetime import datetime, timedelta
 from ..database import get_db
 from ..utils.normalizer import normalize_to_db, normalize_list_to_db, to_display
+from ..services.bls_data import get_market_rate
+
+# Import job parser (installed in scraper module)
+import sys
+sys.path.insert(0, '/home/ian/vanurses/scraper')
+try:
+    from job_parser import enrich_job, parse_job_description
+except ImportError:
+    enrich_job = None
+    parse_job_description = None
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -146,7 +158,13 @@ async def list_jobs(
     """
 
     result = db.execute(text(query), params)
-    jobs = [dict(row._mapping) for row in result]
+    jobs = []
+    for row in result:
+        job = dict(row._mapping)
+        # Add market rate for jobs without disclosed pay
+        if not job.get('pay_min') and not job.get('pay_disclosed'):
+            job['market_rate'] = get_market_rate(db, job.get('nursing_type'), job.get('city'))
+        jobs.append(job)
 
     return {
         "success": True,
@@ -332,7 +350,128 @@ async def get_job(job_id: str, db: Session = Depends(get_db)):
     if not result:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    job = dict(result._mapping)
+    # Add market rate for jobs without disclosed pay
+    if not job.get('pay_min') and not job.get('pay_disclosed'):
+        job['market_rate'] = get_market_rate(db, job.get('nursing_type'), job.get('city'))
+
     return {
         "success": True,
-        "data": dict(result._mapping)
+        "data": job
+    }
+
+
+@router.get("/{job_id}/details")
+async def get_job_details(job_id: str, db: Session = Depends(get_db)):
+    """Get enriched job details with parsed sections.
+
+    Returns cached enrichment data only - no live AI calls.
+    Jobs are enriched via batch process after scraping.
+
+    Returns:
+        - parsed: Structured sections (summary, education, experience, etc.)
+        - raw_text: Clean text fallback
+        - extraction_method: 'ollama', 'regex', or 'raw'
+        - enriched: Whether this job has been processed by AI
+    """
+    # Get job from database with description fallback
+    query = """
+        SELECT id, source_url, description, raw_schema_json
+        FROM jobs
+        WHERE id = :job_id
+    """
+    result = db.execute(text(query), {"job_id": job_id}).first()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job = dict(result._mapping)
+    raw_schema = job.get('raw_schema_json') or {}
+
+    # Parse JSON if it's a string
+    if isinstance(raw_schema, str):
+        try:
+            raw_schema = json.loads(raw_schema)
+        except:
+            raw_schema = {}
+
+    # Check if we have enriched data
+    has_enriched = bool(
+        raw_schema.get('parsed') and
+        raw_schema.get('extraction_method') in ('ollama', 'regex')
+    )
+
+    if has_enriched:
+        # Return cached enrichment data
+        return {
+            "success": True,
+            "data": raw_schema,
+            "enriched": True
+        }
+    else:
+        # No enrichment yet - return basic info with description
+        return {
+            "success": True,
+            "data": {
+                "parsed": {},
+                "raw_text": job.get('description', ''),
+                "extraction_method": "pending",
+                "is_expired": raw_schema.get('is_expired', False)
+            },
+            "enriched": False
+        }
+
+
+@router.get("/{job_id}/preview")
+async def get_job_preview(job_id: str, db: Session = Depends(get_db)):
+    """Get a quick preview of job details for the drawer/popup view.
+
+    Returns essential info plus parsed sections if available.
+    Lighter weight than full details - doesn't trigger enrichment.
+    """
+
+    query = """
+        SELECT
+            j.id, j.title, j.description, j.nursing_type, j.specialty,
+            j.employment_type, j.shift_type, j.shift_hours,
+            j.city, j.state, j.zip,
+            j.pay_min, j.pay_max, j.pay_disclosed, j.sign_on_bonus,
+            j.posted_at, j.source_url, j.raw_schema_json,
+            j.facility_id,
+            f.name as facility_name, f.region as facility_region,
+            f.system_name as facility_system,
+            fs.ofs_score as facility_ofs_score,
+            fs.ofs_grade as facility_ofs_grade
+        FROM jobs j
+        LEFT JOIN facilities f ON j.facility_id = f.id
+        LEFT JOIN facility_scores fs ON f.id = fs.facility_id
+        WHERE j.id = :job_id
+    """
+
+    result = db.execute(text(query), {"job_id": job_id}).first()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job = dict(result._mapping)
+
+    # Extract parsed data if available
+    raw_schema = job.pop('raw_schema_json', None) or {}
+    if isinstance(raw_schema, str):
+        try:
+            raw_schema = json.loads(raw_schema)
+        except:
+            raw_schema = {}
+
+    # Add parsed sections to response
+    job['parsed'] = raw_schema.get('parsed', {})
+    job['has_enriched_data'] = bool(raw_schema.get('fetched_at'))
+
+    # Add market rate if no disclosed pay
+    if not job.get('pay_min') and not job.get('pay_disclosed'):
+        job['market_rate'] = get_market_rate(db, job.get('nursing_type'), job.get('city'))
+
+    return {
+        "success": True,
+        "data": job
     }

@@ -22,6 +22,10 @@ STRIPE_WEBHOOK_SECRET = settings.stripe_webhook_secret
 
 # Price ID mapping from settings
 PRICE_IDS = {
+    "facilities": {
+        "monthly": settings.stripe_price_facilities_monthly,
+        "yearly": settings.stripe_price_facilities_yearly,
+    },
     "starter": {
         "monthly": settings.stripe_price_starter_monthly,
         "yearly": settings.stripe_price_starter_yearly,
@@ -71,6 +75,28 @@ TIERS = {
             "3 Sully AI chats/day",
             "1 free NoFilter chat",
             "5 saved jobs max"
+        ]
+    },
+    "facilities": {
+        "name": "Facilities",
+        "monthly_price": 500,
+        "yearly_price": 4800,
+        "sully_daily_limit": 3,
+        "nofilter_limit": 0,
+        "comparison_limit": 3,
+        "saved_jobs_limit": 0,  # No job saving for facilities-only
+        "pdf_export": False,
+        "personalized_results": False,
+        "resume_builder": False,
+        "full_facility_scores": True,  # Can see all facility OFS scores
+        "job_access": False,  # Cannot access job details
+        "features": [
+            "All 387 facility scores",
+            "CMS Five-Star ratings",
+            "Leapfrog Safety Grades",
+            "Compare 3 facilities",
+            "Interactive map view",
+            "3 Sully AI chats/day"
         ]
     },
     "starter": {
@@ -339,7 +365,7 @@ async def get_subscription_status(
 async def get_tiers():
     """Get all available subscription tiers - includes free for display"""
     # Define order for display
-    tier_order = ["free", "starter", "pro", "premium", "hr_admin"]
+    tier_order = ["free", "facilities", "starter", "pro", "premium", "hr_admin"]
     tiers = []
     for tier_id in tier_order:
         if tier_id in TIERS:

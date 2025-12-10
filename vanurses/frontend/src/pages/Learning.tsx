@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from 'react-oidc-context'
+import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import {
   GraduationCap, BookOpen, Plus, X,
   ChevronRight, Star,
   CheckCircle, AlertCircle, ExternalLink
 } from 'lucide-react'
-import { useSubscription } from '../hooks/useSubscription'
+import { useSubscription, isAdminUnlocked } from '../hooks/useSubscription'
 import BlurOverlay from '../components/BlurOverlay'
 
 interface CEULog {
@@ -48,7 +49,7 @@ export default function Learning() {
   const auth = useAuth()
   const { isPaid } = useSubscription()
   // Only show content if authenticated AND paid
-  const canAccessFeature = auth.isAuthenticated && isPaid
+  const canAccessFeature = (auth.isAuthenticated && isPaid) || isAdminUnlocked()
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'ceu' | 'resources'>('ceu')
   const [showAddCEU, setShowAddCEU] = useState(false)
@@ -60,35 +61,133 @@ export default function Learning() {
     completion_date: ''
   })
 
-  // If user is not paid, show blur overlay
+  // Sample CEU data for demo (declared outside the conditional to avoid duplicate)
+  const sampleCEUs = [
+    { title: 'Pharmacology Update 2024', provider: 'NursingCE.com', hours: 5, category: 'Pharmacology', completion_date: '2024-01-10' },
+    { title: 'Patient Safety Best Practices', provider: 'Wild Iris', hours: 3, category: 'Patient Safety', completion_date: '2024-01-05' },
+    { title: 'Ethics in Healthcare', provider: 'Nurse.com', hours: 2, category: 'Ethics', completion_date: '2023-12-15' },
+    { title: 'Infection Control Protocols', provider: 'CDC', hours: 4, category: 'Infection Control', completion_date: '2023-11-20' },
+  ]
+  const sampleTotalHours = 14
+  const sampleRequiredHours = 30
+
+  // If user is not paid, show blur overlay with sample data
   if (!canAccessFeature) {
     return (
       <BlurOverlay
         title="CEU Learning Center"
-        description="Track your continuing education, access resources, and maintain your nursing credentials. Upgrade to access this premium feature."
+        description="Track your continuing education credits and access curated nursing resources. Upgrade to access this premium feature."
         showDemo
         demoKey="learning"
         showPricing
+        blurIntensity="light"
       >
         <div className="space-y-6">
+          {/* Header */}
           <div className="flex items-center justify-between">
             <div>
-              <div className="h-8 w-48 bg-slate-200 rounded mb-2" />
-              <div className="h-5 w-64 bg-slate-100 rounded" />
+              <h1 className="text-2xl font-bold text-slate-900">Learning Hub</h1>
+              <p className="text-slate-600">CEU tracking and career resources</p>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
-            <div className="flex gap-4 mb-6">
-              <div className="h-10 w-32 bg-slate-100 rounded" />
-              <div className="h-10 w-32 bg-slate-100 rounded" />
+          {/* Tabs */}
+          <div className="flex border-b border-slate-200">
+            <div className="px-6 py-3 text-sm font-medium border-b-2 -mb-px border-primary-600 text-primary-600">
+              <div className="flex items-center gap-2">
+                <GraduationCap className="w-4 h-4" />
+                CEU Tracker
+              </div>
             </div>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <div key={i} className="p-4 rounded-lg border border-slate-200">
-                  <div className="h-6 w-40 bg-slate-200 rounded mb-2" />
-                  <div className="h-4 w-24 bg-slate-100 rounded mb-4" />
-                  <div className="h-3 w-full bg-slate-100 rounded" />
+            <div className="px-6 py-3 text-sm font-medium border-b-2 -mb-px border-transparent text-slate-400">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4" />
+                Resources
+              </div>
+            </div>
+          </div>
+
+          {/* Progress Card */}
+          <div className="bg-gradient-to-br from-primary-500 to-accent-500 rounded-2xl p-6 text-white">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold">License Renewal Progress</h2>
+                <p className="text-primary-100 text-sm">Virginia requires {sampleRequiredHours} CEU hours per renewal</p>
+              </div>
+              <div className="text-right">
+                <p className="text-3xl font-bold">{sampleTotalHours}</p>
+                <p className="text-primary-100 text-sm">of {sampleRequiredHours} hours</p>
+              </div>
+            </div>
+            <div className="w-full bg-white/20 rounded-full h-3 mb-2">
+              <div className="bg-white rounded-full h-3 transition-all" style={{ width: `${(sampleTotalHours / sampleRequiredHours) * 100}%` }} />
+            </div>
+            <p className="text-sm text-primary-100">
+              <AlertCircle className="w-4 h-4 inline mr-1" />
+              {sampleRequiredHours - sampleTotalHours} hours remaining
+            </p>
+          </div>
+
+          {/* CEU Log */}
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-semibold text-slate-900">Your CEU Log</h3>
+              <div className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg">
+                <Plus className="w-4 h-4" />
+                Log CEU
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <table className="w-full">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Course</th>
+                    <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Provider</th>
+                    <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Category</th>
+                    <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Hours</th>
+                    <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {sampleCEUs.map((log, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="px-6 py-4">
+                        <p className="font-medium text-slate-900">{log.title}</p>
+                      </td>
+                      <td className="px-6 py-4 text-slate-600">{log.provider}</td>
+                      <td className="px-6 py-4">
+                        <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs">{log.category}</span>
+                      </td>
+                      <td className="px-6 py-4 text-slate-600">{log.hours}h</td>
+                      <td className="px-6 py-4 text-slate-600">{new Date(log.completion_date).toLocaleDateString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Suggested Free CEU Courses */}
+          <div>
+            <h3 className="font-semibold text-slate-900 mb-4">Suggested Free CEU Courses</h3>
+            <div className="grid md:grid-cols-2 gap-4">
+              {[
+                { title: 'Free Nursing CE Courses', hours: 30, provider: 'NursingCE.com' },
+                { title: 'Free CEU Courses', hours: 2, provider: 'Wild Iris Medical' },
+                { title: 'Virginia Nursing CEUs', hours: 30, provider: 'NurseCE4Less' },
+                { title: 'Substance Misuse Training', hours: 8, provider: 'UVA School of Nursing' },
+              ].map((course, i) => (
+                <div key={i} className="bg-white rounded-lg border border-slate-200 p-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-medium text-slate-700">{course.title}</p>
+                      <p className="text-sm text-slate-400">{course.provider}</p>
+                    </div>
+                    <span className="px-2 py-1 bg-primary-100 text-primary-700 rounded text-xs font-medium">{course.hours}h</span>
+                  </div>
+                  <span className="mt-3 text-sm text-primary-600 flex items-center gap-1">
+                    Start Course <ExternalLink className="w-3 h-3" />
+                  </span>
                 </div>
               ))}
             </div>

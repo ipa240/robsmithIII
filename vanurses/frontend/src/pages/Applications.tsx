@@ -6,9 +6,9 @@ import { Link } from 'react-router-dom'
 import {
   Briefcase, Building2, Calendar, ChevronRight, Clock, GripVertical,
   List, Grid3X3, Plus, MessageSquare, Trash2, Edit2, X, Check,
-  Send, Phone, FileText, MapPin, DollarSign
+  Send, Phone, FileText, MapPin, DollarSign, Crown, Lock
 } from 'lucide-react'
-import { useSubscription } from '../hooks/useSubscription'
+import { useSubscription, isAdminUnlocked } from '../hooks/useSubscription'
 import BlurOverlay from '../components/BlurOverlay'
 
 interface Application {
@@ -49,44 +49,101 @@ export default function Applications() {
   const auth = useAuth()
   const { isPaid } = useSubscription()
   // Only show content if authenticated AND paid
-  const canAccessFeature = auth.isAuthenticated && isPaid
+  const canAccessFeature = (auth.isAuthenticated && isPaid) || isAdminUnlocked()
   const queryClient = useQueryClient()
   const [view, setView] = useState<'kanban' | 'list'>('kanban')
   const [selectedApp, setSelectedApp] = useState<Application | null>(null)
   const [showAddNote, setShowAddNote] = useState(false)
   const [newNote, setNewNote] = useState('')
 
-  // If user is not paid, show blur overlay
+  // Sample data for demo
+  const sampleApplications = [
+    { job_title: 'ICU Registered Nurse', facility_name: 'VCU Medical Center', status: 'interviewing', applied_at: '2024-01-15' },
+    { job_title: 'Emergency RN', facility_name: 'Inova Fairfax', status: 'applied', applied_at: '2024-01-18' },
+    { job_title: 'Med-Surg RN', facility_name: 'Sentara Norfolk', status: 'screening', applied_at: '2024-01-12' },
+    { job_title: 'NICU Nurse', facility_name: 'UVA Health', status: 'offer', applied_at: '2024-01-08' },
+    { job_title: 'OR Nurse', facility_name: 'Riverside Regional', status: 'clicked', applied_at: '2024-01-20' },
+    { job_title: 'Telemetry RN', facility_name: 'Carilion Roanoke', status: 'applied', applied_at: '2024-01-16' },
+  ]
+
+  // If user is not paid, show blur overlay with sample data
   if (!canAccessFeature) {
     return (
       <BlurOverlay
         title="Application Tracker"
-        description="Track your job applications from click to offer. Upgrade to access this premium feature."
+        description="Track all your job applications in one place with our Kanban-style board. Upgrade to access this premium feature."
         showDemo
         demoKey="applications"
         showPricing
+        blurIntensity="light"
       >
         <div className="space-y-6">
+          {/* Header */}
           <div className="flex items-center justify-between">
             <div>
-              <div className="h-8 w-48 bg-slate-200 rounded mb-2" />
-              <div className="h-5 w-64 bg-slate-100 rounded" />
+              <h1 className="text-2xl font-bold text-slate-900">Applications</h1>
+              <p className="text-slate-600">Track your job applications</p>
             </div>
-            <div className="flex gap-2">
-              <div className="h-10 w-24 bg-slate-100 rounded" />
-              <div className="h-10 w-24 bg-slate-100 rounded" />
+            <div className="flex items-center gap-3">
+              <div className="flex bg-slate-100 rounded-lg p-1">
+                <button className="p-2 rounded bg-white shadow">
+                  <Grid3X3 className="w-4 h-4" />
+                </button>
+                <button className="p-2 rounded">
+                  <List className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg">
+                <Plus className="w-4 h-4" />
+                Find Jobs
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-5 gap-4">
-            {['Clicked', 'Applied', 'Screening', 'Interviewing', 'Offer'].map((status) => (
-              <div key={status} className="bg-slate-50 rounded-xl p-3">
-                <div className="h-6 w-20 bg-slate-200 rounded mb-3" />
+          {/* Stats */}
+          <div className="grid grid-cols-4 gap-4">
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <p className="text-sm text-slate-500">Total Applications</p>
+              <p className="text-2xl font-bold text-slate-900">12</p>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <p className="text-sm text-slate-500">In Progress</p>
+              <p className="text-2xl font-bold text-amber-600">6</p>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <p className="text-sm text-slate-500">Offers</p>
+              <p className="text-2xl font-bold text-green-600">2</p>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <p className="text-sm text-slate-500">Response Rate</p>
+              <p className="text-2xl font-bold text-primary-600">67%</p>
+            </div>
+          </div>
+
+          {/* Kanban Board */}
+          <div className="grid grid-cols-4 gap-4">
+            {(['clicked', 'applied', 'screening', 'interviewing'] as const).map(status => (
+              <div key={status} className={`rounded-xl p-4 min-h-[300px] ${STATUS_CONFIG[status].bgColor}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-slate-900">{STATUS_CONFIG[status].label}</h3>
+                  <span className="px-2 py-0.5 bg-white rounded-full text-xs font-medium">
+                    {sampleApplications.filter(a => a.status === status).length}
+                  </span>
+                </div>
                 <div className="space-y-3">
-                  {[1, 2].map((i) => (
-                    <div key={i} className="bg-white rounded-lg p-4 border border-slate-200">
-                      <div className="h-5 w-32 bg-slate-200 rounded mb-2" />
-                      <div className="h-4 w-24 bg-slate-100 rounded" />
+                  {sampleApplications.filter(a => a.status === status).map((app, idx) => (
+                    <div key={idx} className="bg-white rounded-lg p-4 shadow-sm border border-slate-200">
+                      <div className="flex items-start gap-2 mb-2">
+                        <GripVertical className="w-4 h-4 text-slate-300 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="font-medium text-slate-900 text-sm">{app.job_title}</p>
+                          <p className="text-xs text-slate-500">{app.facility_name}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <Calendar className="w-3 h-3" />
+                        {new Date(app.applied_at).toLocaleDateString()}
+                      </div>
                     </div>
                   ))}
                 </div>
