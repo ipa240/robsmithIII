@@ -10,9 +10,22 @@ Extracts structured sections from job posting HTML using:
 import re
 import json
 import requests
+import cloudscraper
 from typing import Dict, Optional, Any
 from datetime import datetime
 from bs4 import BeautifulSoup
+
+# Create cloudscraper instance for Cloudflare-protected sites (like HCA)
+_cloudscraper = None
+
+def get_cloudscraper():
+    """Get or create cloudscraper instance."""
+    global _cloudscraper
+    if _cloudscraper is None:
+        _cloudscraper = cloudscraper.create_scraper(
+            browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False}
+        )
+    return _cloudscraper
 
 # Ollama configuration
 OLLAMA_HOST = "http://192.168.0.105:11434"
@@ -38,35 +51,67 @@ def clean_html_to_text(html: str) -> str:
     return text.strip()
 
 
+def is_prompt_instruction(text: str) -> bool:
+    """Check if text looks like it was copied from the prompt instructions rather than generated."""
+    if not text or not isinstance(text, str):
+        return False
+
+    text_lower = text.lower()
+
+    # Patterns that indicate the model returned the instructions instead of content
+    instruction_patterns = [
+        "2-3 sentence overview",
+        "what unit/department",
+        "what makes this role unique",
+        "what type of patients",
+        "include any mentioned",
+        "all mentioned degrees",
+        "examples:",
+        "always write a",
+        "always generate",
+        "based on the job title",
+        "be thorough",
+        "null or integer",
+    ]
+
+    for pattern in instruction_patterns:
+        if pattern in text_lower:
+            return True
+
+    return False
+
+
 def extract_with_ollama(text: str) -> Optional[Dict[str, Any]]:
     """Extract job sections using Ollama LLM."""
     # Truncate text if too long (keep first 5000 chars for more context)
     text = text[:5000] if len(text) > 5000 else text
 
-    prompt = f"""You are extracting structured data from a nursing job posting. Be thorough and extract ALL relevant details.
+    prompt = f"""Analyze this nursing job posting and extract structured data. Generate actual content - DO NOT copy the field descriptions.
 
-Return a JSON object with these fields:
+For the JSON response:
+- summary: Write YOUR OWN 2-3 sentence description of the role (department, shift, what's unique)
+- education: List required/preferred degrees mentioned (BSN, ADN, MSN, etc.)
+- experience: Years and type of experience required/preferred
+- certifications: Licenses and certs required/preferred (RN license, BLS, ACLS, etc.)
+- benefits: List all benefits mentioned (insurance, PTO, 401k, tuition, etc.)
+- schedule: Shift type, hours, pattern (Day/Night, 7a-7p, 3x12, etc.)
+- sign_on_bonus: Integer dollar amount if mentioned, otherwise null
 
+Return JSON only:
 {{
-  "summary": "ALWAYS write a 2-3 sentence overview based on the job title, department, and any key details. Example: 'Join our ICU team caring for critically ill patients. This full-time night position offers competitive benefits and growth opportunities.' Even if brief info, write SOMETHING useful.",
-  "education": "ALL mentioned degrees: required and preferred. Examples: 'BSN required', 'ADN with BSN in progress accepted', 'MSN preferred'",
-  "experience": "Years required, type of experience, and any preferred experience. Examples: '1+ years acute care required', '2 years ICU preferred', 'New grads welcome'",
-  "certifications": "ALL licenses and certifications mentioned - both required and preferred. Examples: 'Active VA RN license required', 'BLS required', 'ACLS preferred', 'CCRN a plus'",
-  "benefits": "List ALL benefits mentioned: insurance, PTO, retirement, tuition, childcare, parking, etc. Be comprehensive.",
-  "schedule": "Shift details: Day/Night/Rotating, hours (7a-7p, 7p-7a), pattern (3x12, 4x10), weekend requirements, holiday rotation, on-call requirements",
-  "sign_on_bonus": null or integer dollar amount (e.g., 10000 for $10,000 bonus)
+  "summary": "<your generated summary here>",
+  "education": "<degrees or null>",
+  "experience": "<experience or null>",
+  "certifications": "<certs or null>",
+  "benefits": ["benefit1", "benefit2"],
+  "schedule": "<schedule or null>",
+  "sign_on_bonus": null
 }}
 
-IMPORTANT RULES:
-- For summary: ALWAYS generate something based on title and any context. Never return null for summary.
-- For other fields: use null only if truly not mentioned
-- Include exact numbers when mentioned (years, dollar amounts)
-- For benefits, list each one even if briefly mentioned
-
-Job posting to analyze:
+JOB POSTING:
 {text}
 
-Return ONLY the JSON object, nothing else:"""
+RESPOND WITH JSON ONLY:"""
 
     try:
         response = requests.post(
@@ -86,6 +131,11 @@ Return ONLY the JSON object, nothing else:"""
 
         # Validate we got at least some data
         if parsed and any(v for v in parsed.values() if v):
+            # Check if the model returned prompt instructions instead of real content
+            if is_prompt_instruction(parsed.get('summary', '')):
+                print(f"Warning: Model returned prompt instructions as summary, clearing it")
+                parsed['summary'] = None
+
             return parsed
         return None
 
@@ -231,6 +281,8 @@ def detect_platform(url: str) -> str:
     """Detect the job platform from URL."""
     if 'myworkdayjobs.com' in url:
         return 'workday'
+    elif 'hcahealthcare.com' in url:
+        return 'hca'
     elif 'icims.com' in url:
         return 'icims'
     elif 'oraclecloud.com' in url:
@@ -386,13 +438,18 @@ def enrich_job(job_url: str, existing_description: str = None, use_ollama: bool 
     # Generic HTML fetch for other platforms
     if not html and not is_expired:
         try:
-            response = requests.get(
-                job_url,
-                headers={
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                },
-                timeout=30
-            )
+            # Use cloudscraper for HCA (Cloudflare protected)
+            if platform == 'hca':
+                scraper = get_cloudscraper()
+                response = scraper.get(job_url, timeout=30)
+            else:
+                response = requests.get(
+                    job_url,
+                    headers={
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    },
+                    timeout=30
+                )
 
             # HTTP 410 Gone means job is expired/removed
             if response.status_code == 410:

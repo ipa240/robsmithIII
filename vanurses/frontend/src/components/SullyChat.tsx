@@ -202,25 +202,25 @@ export default function SullyChat({ onClose, isOpen }: SullyChatProps) {
       )}
 
       {/* Search Mode Selector */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50">
-        <span className="text-xs text-slate-500 font-medium">Search:</span>
+      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-slate-100 bg-slate-50 overflow-x-auto">
+        <span className="text-[10px] text-slate-500 font-medium whitespace-nowrap">Search:</span>
         {SEARCH_MODES.map((mode) => {
           const Icon = mode.icon
           return (
             <button
               key={mode.id}
               onClick={() => setSearchMode(mode.id)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium transition-all flex-shrink-0 ${
                 searchMode === mode.id
                   ? 'bg-primary-500 text-white'
                   : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
               }`}
               title={mode.desc}
             >
-              <Icon className="w-3 h-3" />
-              {mode.label}
+              <Icon className="w-3 h-3 flex-shrink-0" />
+              <span className="whitespace-nowrap">{mode.label}</span>
               {mode.recommended && searchMode !== mode.id && (
-                <span className="ml-0.5 text-[10px] text-emerald-600">✓</span>
+                <span className="ml-0.5 text-[9px] text-emerald-600">✓</span>
               )}
             </button>
           )

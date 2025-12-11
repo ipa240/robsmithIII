@@ -73,19 +73,28 @@ CRITICAL RULES:
 
 Cut the fluff. Give them the facts straight.""",
 
-    "nofilter": """You are Sully, a veteran ICU nurse turned AI assistant for VANurses.net in Virginia.
+    "nofilter": """You are Sully, a crusty, burned-out 25-year veteran ICU/ER nurse turned AI assistant for VANurses.net.
 
-PERSONALITY: Brutally honest, blunt, no BS. Talk like a nurse giving real advice after a rough shift. You can use mild profanity (damn, hell, crap) but keep it professional enough for work.
+PERSONALITY: You're that legendary salty nurse everyone knows - the one who's seen more codes than hot meals, survived every toxic manager, and has zero f***s left to give about corporate feelings. Think "night shift charge nurse on hour 14 who just got told there's a mandatory meeting about 'synergy'." You're fiercely protective of nurses but absolutely savage about bad facilities. Very sarcastic, bitchy when warranted, and you curse like a sailor on shore leave (damn, hell, crap, BS, ass, and occasional stronger stuff when the situation calls for it).
+
+NURSING ZINGERS FOR INSPIRATION (but CREATE YOUR OWN - never repeat the same line twice):
+- Comparisons: MRSA outbreaks, C. diff, code browns, septic lactate levels, 4-hour ER waits, unwitnessed falls, med errors, pressure ulcers, DNR orders, mandatory overtime, holiday doubles, full bladders, night shift at county jail, rapid responses
+- Body part humor: heads up asses, full bladders, blood pressure spikes, eye rolls, headaches
+- Nursing situations: codes, admits at shift change, mandatory meetings, charting nightmares, call lights, bed alarms, med passes, transport delays
+- Admin burns: synergy meetings, retention as a suggestion, bonus-counting, never seen a patient, pizza parties instead of raises
+
+CRITICAL: NEVER repeat the same zinger twice. Be CREATIVE - invent new nursing-specific comparisons every time. Mix and match concepts. Surprise them.
 
 CRITICAL RULES:
 1. ONLY use data provided in the DATABASE CONTEXT section below
 2. ALWAYS cite specific facility names, scores, and numbers from the data
 3. NEVER make up facility names, scores, or statistics
-4. If data isn't provided, say "I don't have that data right now"
-5. Call out bad facilities by name - nurses deserve the truth
-6. Keep responses real but not crude
+4. If data isn't provided, say "I don't have that damn data right now"
+5. Call out bad facilities BY NAME with savage nursing humor
+6. Use nursing-specific comparisons and dark humor liberally
+7. Be memorably bitchy but always accurate - the sass serves the truth
 
-Give nurses the straight truth without the corporate sugarcoating."""
+You're jaded as hell but you care about your fellow nurses. Give them the real talk that HR would have a stroke over."""
 }
 
 
@@ -426,10 +435,9 @@ async def chat_with_sully(
 
     data_sources = []
 
-    # Get database context
+    # Get database context - always fetch, but use differently based on mode
     db_context = ""
-    if search_mode in ["internal", "hybrid"]:
-        db_context, data_sources = get_comprehensive_context(db, request.message)
+    db_context, data_sources = get_comprehensive_context(db, request.message)
 
     # Build the system prompt
     system_prompt = MOOD_PROMPTS[mood]
@@ -449,8 +457,8 @@ Do NOT make up any facility names or statistics. If the data isn't in the contex
         data_sources.append("General Knowledge")
 
     if search_mode == "web":
-        system_prompt += "\n\nProvide general nursing career advice for Virginia. Note: Web search not fully implemented yet."
-        data_sources = ["General Knowledge"]
+        system_prompt += "\n\nYou have access to the database context above AND can supplement with your general nursing knowledge. Feel free to use the data provided and also share general career advice, industry insights, and your experience-based opinions."
+        data_sources.append("General Knowledge")
 
     # Call Ollama
     try:
@@ -463,9 +471,9 @@ Do NOT make up any facility names or statistics. If the data isn't in the contex
                     "system": system_prompt,
                     "stream": False,
                     "options": {
-                        "temperature": 0.3 if mood == "neutral" else 0.5,
+                        "temperature": 0.8 if mood == "nofilter" else (0.3 if mood == "neutral" else 0.5),
                         "top_p": 0.85,
-                        "num_predict": 500
+                        "num_predict": 800
                     }
                 }
             )
@@ -604,16 +612,29 @@ RESPONSE FORMAT:
 - Point out potential red flags clearly
 - Give real talk, not corporate fluff""",
 
-    "nofilter": """You are Sully, a veteran ICU nurse turned AI career advisor for VANurses.net.
-Your job is to give a brief, personalized opinion on whether this job is a good match for the user based on their preferences.
+    "nofilter": """You are Sully, a crusty, burned-out 25-year ICU/ER veteran now career advisor for VANurses.net.
+You've worked the worst units, coded more patients than you can count, survived every flavor of toxic management, and now you're the protective older nurse who keeps newbies from walking into the same disasters you did. Give your REAL, unfiltered take.
 
-PERSONALITY: Brutally honest, talk like a real nurse giving advice after a long shift. You can use mild profanity (damn, hell, crap) but keep it work-appropriate.
+PERSONALITY: Exhausted, savage, and absolutely done with corporate BS. You talk like it's 3am at the nursing station after your third admission and you just found out about a "mandatory education module." Curse freely and use dark nursing humor.
+
+ZINGER INSPIRATION (CREATE YOUR OWN - never repeat the same line):
+- Bad job concepts: chews through nurses, more red flags than a blood bank, DNR with more life, mandatory overtime written all over it, burnout in 6 months, staffing nightmare, floating to hell, orientation that's just 'good luck'
+- Good job concepts: unicorn job, rarer than a quiet night shift, decent ratios exist?, someone pinch me, would drag my ass out of bed for this
+- Mix with: codes, admits, charting, ratios, floating, call lights, management BS, pizza parties, retention bonuses that never come
+
+CRITICAL: BE CREATIVE - invent NEW comparisons every single time. Never use the same zinger twice.
+
+CRITICAL: You MUST end with one of these verdicts:
+- "Get your ass in there before someone else does" / "Apply like your rent depends on it" (if good)
+- "Run like there's a code brown behind you" / "Hard pass - protect your license" / "Nope, nope, absolutely the hell not" (if bad)
+- "Eh, could be worse - I've definitely worked worse" (if mixed)
 
 RESPONSE FORMAT:
-- Keep it to 2-3 sentences max
-- Tell them the truth, no BS
-- Call out any red flags bluntly
-- Talk like a real nurse would to a colleague"""
+- Keep it to 2-4 sentences max
+- START with your savage gut reaction
+- Call out the biggest red/green flag with nursing-specific humor
+- END with a memorable verdict
+- No fence-sitting - real nurses need real talk"""
 }
 
 
@@ -621,55 +642,68 @@ RESPONSE FORMAT:
 async def get_job_opinion(
     request: JobOpinionRequest,
     db: Session = Depends(get_db),
-    current_user: Optional[CurrentUser] = Depends(get_current_user_optional)
+    current_user: Optional[CurrentUser] = Depends(get_current_user_optional),
+    x_admin_unlock: Optional[str] = Header(None, alias="X-Admin-Unlock")
 ):
     """Get Sully's personalized opinion on a job based on user's profile and preferences"""
+
+    # Check for admin unlock header (allows access without authentication)
+    is_admin_unlocked = x_admin_unlock == "true"
 
     # Get user from token
     user = await get_user_from_token(current_user, db)
 
-    if not user:
+    if not user and not is_admin_unlocked:
         raise HTTPException(status_code=401, detail="Please sign in to get Sully's opinion")
 
-    user_id = str(user["id"])
-    tier = user.get("tier", "free") or "free"
-    tier_config = TIER_LIMITS.get(tier, TIER_LIMITS["free"])
+    # For admin unlocked without login, use demo/guest values with full access
+    if is_admin_unlocked and not user:
+        user_id = "admin-demo"
+        tier = "hr_admin"
+        tier_config = TIER_LIMITS["hr_admin"]
+    else:
+        user_id = str(user["id"])
+        tier = user.get("tier", "free") or "free"
+        tier_config = TIER_LIMITS.get(tier, TIER_LIMITS["free"])
 
     # Validate mood
     mood = request.mood.lower()
     if mood not in JOB_OPINION_PROMPTS:
         mood = "optimistic"
 
-    # Check if nofilter is allowed for this tier
-    if mood == "nofilter" and not tier_config["nofilter_allowed"]:
+    # Check if nofilter is allowed for this tier (admin unlock gets all access)
+    if mood == "nofilter" and not tier_config["nofilter_allowed"] and not is_admin_unlocked:
         raise HTTPException(
             status_code=403,
             detail="No Filter mode requires a Pro subscription or higher. Upgrade to unlock unfiltered Sully!"
         )
 
-    # Get user's onboarding preferences
-    preferences = db.execute(
-        text("""
-            SELECT
-                specialties, employment_types, shift_preferences,
-                locations, desired_salary_min, desired_salary_max,
-                certifications, experience_years, nursing_types,
-                career_goals, work_environment_prefs
-            FROM user_onboarding
-            WHERE user_id = :user_id
-        """),
-        {"user_id": user_id}
-    ).first()
+    # Get user's onboarding preferences (skip for admin demo users)
+    preferences = None
+    user_profile = None
+    if user_id != "admin-demo":
+        preferences = db.execute(
+            text("""
+                SELECT
+                    specialties, employment_types, shift_preferences,
+                    locations, desired_salary_min, desired_salary_max,
+                    certifications, experience_years, nursing_types,
+                    career_goals, work_environment_prefs
+                FROM user_onboarding
+                WHERE user_id = :user_id
+            """),
+            {"user_id": user_id}
+        ).first()
 
-    # Get user profile data
-    user_profile = db.execute(
-        text("""
-            SELECT first_name, last_name, email, tier
-            FROM users
-            WHERE id = :user_id
-        """),
-        {"user_id": user_id}
-    ).first()
+        # Get user profile data
+        user_profile = db.execute(
+            text("""
+                SELECT first_name, last_name, email, tier
+                FROM users
+                WHERE id = :user_id
+            """),
+            {"user_id": user_id}
+        ).first()
 
     # Get comprehensive facility data if we have the facility
     facility_data = None
@@ -678,7 +712,7 @@ async def get_job_opinion(
             text("""
                 SELECT
                     f.id, f.name, f.city, f.state, f.region, f.system_name,
-                    f.bed_count, f.hospital_type,
+                    f.bed_count, f.facility_type,
                     fs.ofs_score, fs.ofs_grade,
                     fs.pci_score, fs.ali_score, fs.csi_score, fs.cci_score,
                     fs.lssi_score, fs.qli_score, fs.pei_score, fs.fsi_score,
@@ -726,7 +760,7 @@ JOB DETAILS:
 FACILITY DETAILS ({fac['name']}):
 - Location: {fac['city']}, {fac['state']} ({fac.get('region') or 'Virginia'})
 - System: {fac.get('system_name') or 'Independent'}
-- Hospital Type: {fac.get('hospital_type') or 'Not specified'}
+- Facility Type: {fac.get('facility_type') or 'Not specified'}
 - Bed Count: {fac.get('bed_count') or 'Not specified'}
 - Open Jobs: {fac.get('open_jobs', 0)} positions available
 
@@ -795,7 +829,7 @@ ADDITIONAL RULES:
                     "options": {
                         "temperature": 0.6,
                         "top_p": 0.9,
-                        "num_predict": 200
+                        "num_predict": 400
                     }
                 }
             )
@@ -820,4 +854,261 @@ ADDITIONAL RULES:
     return {
         "opinion": opinion,
         "facility_score": facility_score
+    }
+
+
+class FacilityOpinionRequest(BaseModel):
+    facility_id: str
+    mood: str = "neutral"
+
+
+# Mood prompts for facility opinions
+FACILITY_OPINION_PROMPTS = {
+    "optimistic": """You are Sully, a warm and encouraging AI nursing career advisor for VANurses.net.
+Give a brief, honest opinion about this facility based on its OFS scores and data.
+
+PERSONALITY: Friendly, supportive, uses occasional emojis. Find the positives and opportunities!
+
+RESPONSE FORMAT:
+- Keep it to 2-3 sentences max
+- Be encouraging but truthful about the scores
+- If it's a great facility, say so!
+- If there are concerns, frame them as things to ask about in interviews""",
+
+    "neutral": """You are Sully, a professional AI nursing career advisor for VANurses.net.
+Give a brief, objective opinion about this facility based on its OFS scores and data.
+
+PERSONALITY: Balanced, factual, objective. Present the data clearly.
+
+RESPONSE FORMAT:
+- Keep it to 2-3 sentences max
+- Be objective about what the scores indicate
+- State both strengths and areas of concern""",
+
+    "stern": """You are Sully, a direct and no-nonsense AI nursing career advisor for VANurses.net.
+Give a brief, honest opinion about this facility based on its OFS scores and data.
+
+PERSONALITY: Blunt, direct. Use mild language (damn, hell) occasionally.
+
+RESPONSE FORMAT:
+- Keep it to 2-3 sentences max
+- Don't sugarcoat bad scores
+- Point out red flags clearly""",
+
+    "nofilter": """You are Sully, a crusty, exhausted 25-year ICU/ER vet now reviewing facilities for VANurses.net.
+You've worked at places like this - the good, the bad, and the "how the hell does Joint Commission let this slide?" - and you're not about to let another nurse walk into a dumpster fire. Give your SAVAGE, unfiltered opinion.
+
+PERSONALITY: Peak burned-out nurse energy. You're cynical, sarcastic as hell, and have seen enough bad facilities to fill a morgue. You're that nurse in the break room who GOES OFF after management leaves. Curse freely and use nursing dark humor.
+
+NURSING ZINGERS FOR BAD FACILITIES:
+- "These scores are lower than patient satisfaction after a 4-hour ER wait."
+- "This place is on par with a MRSA outbreak - avoid at all costs."
+- "Their safety score? I've seen better numbers on a septic patient's lactate."
+- "Management here clearly thinks 'nurse retention' is just a suggestion."
+- "I'd rather work a holiday double than set foot in this place."
+- "These ratings make night shift at a prison look like a vacation."
+- "Someone should call a rapid response on this facility's reputation."
+
+NURSING ZINGERS FOR GOOD FACILITIES:
+- "Well butter my biscuits, a facility that doesn't actively try to kill its nurses."
+- "I'd actually show up without needing to be bribed with overtime."
+- "Unicorn alert - a place that pays well AND doesn't suck."
+
+CRITICAL: You MUST end with one of these verdicts:
+- "I'd actually show up for this one" / "Get in before they come to their senses" (if good)
+- "Avoid like a C. diff outbreak" / "Run like there's a code brown on your floor" / "Hell to the no" (if bad)
+- "Meh, I've worked worse - but keep your eyes open" (if mixed)
+
+RESPONSE FORMAT:
+- Keep it to 2-4 sentences max
+- START with your savage gut reaction using nursing humor
+- Call out the biggest red/green flag with memorable sass
+- Compare to nursing-specific disasters we all know
+- END with your quotable verdict - would YOU work here?"""
+}
+
+
+@router.post("/facility-opinion")
+async def get_facility_opinion(
+    request: FacilityOpinionRequest,
+    db: Session = Depends(get_db),
+    current_user: Optional[CurrentUser] = Depends(get_current_user_optional),
+    x_admin_unlock: Optional[str] = Header(None, alias="X-Admin-Unlock")
+):
+    """Get Sully's opinion on a facility based on its scores and data"""
+
+    # Check for admin unlock header
+    is_admin_unlocked = x_admin_unlock == "true"
+
+    # Get user from token
+    user = await get_user_from_token(current_user, db)
+
+    if not user and not is_admin_unlocked:
+        raise HTTPException(status_code=401, detail="Please sign in to get Sully's opinion")
+
+    # Get tier info
+    if is_admin_unlocked and not user:
+        tier = "hr_admin"
+        tier_config = TIER_LIMITS["hr_admin"]
+    else:
+        tier = user.get("tier", "free") or "free"
+        tier_config = TIER_LIMITS.get(tier, TIER_LIMITS["free"])
+
+    # Validate mood
+    mood = request.mood.lower()
+    if mood not in FACILITY_OPINION_PROMPTS:
+        mood = "neutral"
+
+    # Check if nofilter is allowed
+    if mood == "nofilter" and not tier_config["nofilter_allowed"] and not is_admin_unlocked:
+        raise HTTPException(
+            status_code=403,
+            detail="NoFilter mode requires a Pro subscription or higher."
+        )
+
+    # Get comprehensive facility data
+    facility_data = db.execute(
+        text("""
+            SELECT
+                f.id, f.name, f.city, f.state, f.region, f.system_name,
+                f.bed_count, f.facility_type,
+                f.zip_code, f.career_url,
+                fs.ofs_score, fs.ofs_grade, fs.indices_available,
+                fs.pci_score, fs.eri_score, fs.lssi_score, fs.pei_score,
+                fs.fsi_score, fs.cmsi_score, fs.ali_score, fs.jti_score,
+                fs.lsi_score, fs.csi_score, fs.qli_score, fs.oii_score, fs.cci_score,
+                (SELECT COUNT(*) FROM jobs j WHERE j.facility_id = f.id AND j.is_active = true) as open_jobs,
+                (SELECT ROUND(AVG(pay_max)::numeric, 2) FROM jobs j WHERE j.facility_id = f.id AND j.is_active = true AND j.pay_max IS NOT NULL) as avg_pay
+            FROM facilities f
+            LEFT JOIN facility_scores fs ON f.id = fs.facility_id
+            WHERE f.id = :facility_id
+        """),
+        {"facility_id": request.facility_id}
+    ).first()
+
+    if not facility_data:
+        raise HTTPException(status_code=404, detail="Facility not found")
+
+    fac = dict(facility_data._mapping)
+
+    # Get statewide comparison data for context
+    comparison_data = db.execute(
+        text("""
+            SELECT
+                ROUND(AVG(ofs_score)::numeric, 1) as avg_ofs,
+                ROUND(AVG(pci_score)::numeric, 1) as avg_pci,
+                ROUND(AVG(eri_score)::numeric, 1) as avg_eri,
+                ROUND(AVG(lssi_score)::numeric, 1) as avg_lssi,
+                ROUND(AVG(pei_score)::numeric, 1) as avg_pei,
+                ROUND(AVG(fsi_score)::numeric, 1) as avg_fsi,
+                ROUND(AVG(cmsi_score)::numeric, 1) as avg_cmsi,
+                COUNT(*) as total_facilities,
+                (SELECT COUNT(*) FROM facility_scores WHERE ofs_score < :this_score) as facilities_below
+            FROM facility_scores
+            WHERE ofs_score IS NOT NULL
+        """),
+        {"this_score": fac.get('ofs_score') or 0}
+    ).first()
+
+    comp = dict(comparison_data._mapping) if comparison_data else {}
+    percentile = round((comp.get('facilities_below', 0) / max(comp.get('total_facilities', 1), 1)) * 100) if comp.get('total_facilities') else None
+
+    # Build context for Sully
+    facility_context = f"""
+FACILITY: {fac['name']}
+- Location: {fac['city']}, {fac['state']} ({fac.get('region') or 'Virginia'})
+- System: {fac.get('system_name') or 'Independent'}
+- Type: {fac.get('facility_type') or 'Hospital'}
+- Beds: {fac.get('bed_count') or 'Unknown'}
+- Open Positions: {fac.get('open_jobs', 0)}
+- Average Pay: ${fac.get('avg_pay') or 'Unknown'}/hr
+
+OVERALL FACILITY SCORE: {fac.get('ofs_score') or 'Not rated'} (Grade: {fac.get('ofs_grade') or 'N/A'})
+Indices scored: {fac.get('indices_available') or 0} of 13
+"""
+
+    # Add comparison context if available
+    if percentile is not None and comp.get('avg_ofs'):
+        facility_context += f"""
+HOW THIS COMPARES (Virginia statewide):
+- This facility ranks in the {percentile}th percentile (beats {percentile}% of {comp.get('total_facilities', 0)} facilities)
+- Virginia average OFS score: {comp.get('avg_ofs')} (this facility: {fac.get('ofs_score') or 'N/A'})
+- Average Pay score statewide: {comp.get('avg_pci') or 'N/A'} (this: {fac.get('pci_score') or 'N/A'})
+- Average Safety score statewide: {comp.get('avg_lssi') or 'N/A'} (this: {fac.get('lssi_score') or 'N/A'})
+- Average Employee Reviews statewide: {comp.get('avg_eri') or 'N/A'} (this: {fac.get('eri_score') or 'N/A'})
+"""
+
+    facility_context += """
+INDIVIDUAL INDEX SCORES (out of 100):
+"""
+
+    index_scores = {
+        'Pay & Compensation (PCI)': fac.get('pci_score'),
+        'Employee Reviews (ERI)': fac.get('eri_score'),
+        'Safety & Security (LSSI)': fac.get('lssi_score'),
+        'Patient Experience (PEI)': fac.get('pei_score'),
+        'Facility Quality (FSI)': fac.get('fsi_score'),
+        'CMS Quality Rating (CMSI)': fac.get('cmsi_score'),
+        'Amenities & Lifestyle (ALI)': fac.get('ali_score'),
+        'Job Transparency (JTI)': fac.get('jti_score'),
+        'Leapfrog Safety (LSI)': fac.get('lsi_score'),
+        'Commute Score (CSI)': fac.get('csi_score'),
+        'Quality of Life (QLI)': fac.get('qli_score'),
+        'Opportunity Insights (OII)': fac.get('oii_score'),
+        'Climate & Comfort (CCI)': fac.get('cci_score'),
+    }
+
+    for name, score in index_scores.items():
+        if score is not None:
+            facility_context += f"- {name}: {score}\n"
+
+    # Get system prompt
+    system_prompt = FACILITY_OPINION_PROMPTS[mood] + """
+
+ADDITIONAL RULES:
+- Reference specific scores AND how they compare to statewide averages
+- Use the percentile ranking to put scores in perspective
+- DO NOT write long paragraphs
+- DO NOT make up information not provided
+- DO NOT explicitly compare to named facilities - just say "above/below average" """
+
+    # Call Ollama
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            response = await client.post(
+                f"{OLLAMA_URL}/api/generate",
+                json={
+                    "model": OLLAMA_MODEL,
+                    "prompt": f"Based on this facility's data and scores, give your quick opinion on whether it's a good place to work:\n\n{facility_context}",
+                    "system": system_prompt,
+                    "stream": False,
+                    "options": {
+                        "temperature": 0.6,
+                        "top_p": 0.9,
+                        "num_predict": 500
+                    }
+                }
+            )
+            response.raise_for_status()
+            data = response.json()
+            opinion = data.get("response", "").strip()
+            opinion = opinion.replace("DATASET", "").strip()
+            opinion = re.sub(r"[--]", "", opinion)
+
+            if not opinion:
+                opinion = "This facility has interesting potential. Check out the specific scores above to see where it shines and where to ask questions."
+
+    except httpx.TimeoutException:
+        opinion = "Taking too long to analyze - try again in a moment!"
+    except httpx.HTTPError:
+        opinion = "Having trouble connecting right now. Give me another shot!"
+    except Exception as e:
+        opinion = "Something went wrong. Try asking me again!"
+
+    return {
+        "opinion": opinion,
+        "mood": mood,
+        "facility_name": fac['name'],
+        "ofs_score": fac.get('ofs_score'),
+        "ofs_grade": fac.get('ofs_grade')
     }

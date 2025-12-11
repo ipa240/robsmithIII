@@ -6,13 +6,15 @@ import {
   Briefcase, Building2, Star, ArrowRight, CheckCircle, MessageCircle,
   Sparkles, LogIn, MapPin, Bell, FileText, GitCompare, TrendingUp, Users,
   Newspaper, Heart, Search, Award, Shield, Activity, Clock, DollarSign, Smile,
-  ClipboardList, Target
+  ClipboardList, Target, Menu, X, Map, Bookmark, GraduationCap, Bot, LayoutDashboard
 } from 'lucide-react'
+import { useState } from 'react'
 import { api } from '../api/client'
 import SullyButton from '../components/SullyButton'
 
 export default function Landing() {
   const auth = useAuth()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const { data: stats } = useQuery({
     queryKey: ['stats'],
@@ -41,15 +43,26 @@ export default function Landing() {
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
       {/* Header */}
       <header className="absolute top-0 left-0 right-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-6">
           <div className="flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-accent-500 rounded-xl flex items-center justify-center">
-                <span className="text-white font-bold">VA</span>
-              </div>
-              <span className="text-2xl font-bold text-white">VANurses</span>
-            </div>
-            <div className="flex items-center gap-4">
+            <Link to="/" className="flex items-center">
+              <img
+                src="/media/vanurses-logo.png"
+                alt="VANurses"
+                className="h-12 sm:h-16 md:h-28 w-auto brightness-0 invert"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement
+                  target.style.display = 'none'
+                  const fallback = document.createElement('span')
+                  fallback.className = 'text-xl md:text-3xl font-bold text-white'
+                  fallback.textContent = 'VANurses'
+                  target.parentNode?.appendChild(fallback)
+                }}
+              />
+            </Link>
+
+            {/* Desktop Nav */}
+            <div className="hidden md:flex items-center gap-4">
               <Link to="/jobs" className="text-white/80 hover:text-white font-medium">
                 Jobs
               </Link>
@@ -73,13 +86,7 @@ export default function Landing() {
                     Log In
                   </button>
                   <button
-                    onClick={() => {
-                      console.log('Get Started clicked, auth:', { isLoading: auth.isLoading, error: auth.error })
-                      auth.signinRedirect().catch(err => {
-                        console.error('Sign in error:', err)
-                        alert('Sign in error: ' + err.message)
-                      })
-                    }}
+                    onClick={() => auth.signinRedirect()}
                     className="bg-white text-slate-900 px-5 py-2.5 rounded-lg font-semibold hover:bg-slate-100 transition-colors"
                   >
                     Get Started
@@ -87,31 +94,205 @@ export default function Landing() {
                 </>
               )}
             </div>
+
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-2 text-white"
+            >
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
           </div>
+
         </div>
       </header>
 
+      {/* Mobile Menu - Fixed position overlay */}
+      {mobileMenuOpen && (
+        <div className="md:hidden fixed top-16 left-0 right-0 bg-slate-900 border-b border-white/10 shadow-2xl z-[100] max-h-[80vh] overflow-y-auto">
+          <div className="flex flex-col gap-1 px-4 py-4">
+            {/* Job Search */}
+            <p className="text-xs text-slate-500 uppercase tracking-wider px-4 pt-2 pb-1">Job Search</p>
+            <Link
+              to="/jobs"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-3 text-white hover:bg-white/10 font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              <Briefcase className="w-5 h-5 text-primary-400" />
+              Browse Jobs
+            </Link>
+            <Link
+              to="/saved"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-3 text-white hover:bg-white/10 font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              <Bookmark className="w-5 h-5 text-rose-400" />
+              Saved Jobs
+            </Link>
+            <Link
+              to="/applications"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-3 text-white hover:bg-white/10 font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              <ClipboardList className="w-5 h-5 text-emerald-400" />
+              Applications
+            </Link>
+
+            {/* Facilities & Research */}
+            <p className="text-xs text-slate-500 uppercase tracking-wider px-4 pt-4 pb-1">Facilities & Research</p>
+            <Link
+              to="/facilities"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-3 text-white hover:bg-white/10 font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              <Building2 className="w-5 h-5 text-accent-400" />
+              View Facilities
+            </Link>
+            <Link
+              to="/map"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-3 text-white hover:bg-white/10 font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              <Map className="w-5 h-5 text-sky-400" />
+              Map View
+            </Link>
+            <Link
+              to="/compare"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-3 text-white hover:bg-white/10 font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              <GitCompare className="w-5 h-5 text-violet-400" />
+              Compare Facilities
+            </Link>
+
+            {/* Tools & AI */}
+            <p className="text-xs text-slate-500 uppercase tracking-wider px-4 pt-4 pb-1">Tools & AI</p>
+            <Link
+              to="/dashboard"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-3 text-white hover:bg-white/10 font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              <LayoutDashboard className="w-5 h-5 text-primary-400" />
+              Dashboard
+            </Link>
+            <Link
+              to="/trends"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-3 text-white hover:bg-white/10 font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              <TrendingUp className="w-5 h-5 text-emerald-400" />
+              Market Trends
+            </Link>
+            <Link
+              to="/sully"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-3 text-white hover:bg-white/10 font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              <Bot className="w-5 h-5 text-primary-400" />
+              Sully AI
+            </Link>
+
+            {/* Career Resources */}
+            <p className="text-xs text-slate-500 uppercase tracking-wider px-4 pt-4 pb-1">Career Resources</p>
+            <Link
+              to="/learn"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-3 text-white hover:bg-white/10 font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              <GraduationCap className="w-5 h-5 text-amber-400" />
+              Learning (CEUs)
+            </Link>
+            <Link
+              to="/resume"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-3 text-white hover:bg-white/10 font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              <FileText className="w-5 h-5 text-blue-400" />
+              Resume Builder
+            </Link>
+            <Link
+              to="/news"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-3 text-white hover:bg-white/10 font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              <Newspaper className="w-5 h-5 text-orange-400" />
+              Healthcare News
+            </Link>
+            <Link
+              to="/community"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-3 text-white hover:bg-white/10 font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              <Users className="w-5 h-5 text-pink-400" />
+              Community
+            </Link>
+
+            {/* Information */}
+            <p className="text-xs text-slate-500 uppercase tracking-wider px-4 pt-4 pb-1">Information</p>
+            <Link
+              to="/scoring"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-3 text-white hover:bg-white/10 font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              <Award className="w-5 h-5 text-amber-400" />
+              How We Score
+            </Link>
+
+            {/* Auth Buttons */}
+            <div className="border-t border-white/20 my-3 pt-3">
+              {auth.isAuthenticated ? (
+                <Link
+                  to="/dashboard"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center justify-center gap-2 bg-primary-600 text-white px-5 py-4 rounded-lg font-semibold text-center w-full"
+                >
+                  <Sparkles className="w-5 h-5" />
+                  Go to Dashboard
+                </Link>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => { setMobileMenuOpen(false); auth.signinRedirect() }}
+                    className="flex items-center justify-center gap-2 text-white bg-white/10 font-medium py-4 px-4 rounded-lg transition-colors"
+                  >
+                    <LogIn className="w-5 h-5" />
+                    Log In
+                  </button>
+                  <button
+                    onClick={() => { setMobileMenuOpen(false); auth.signinRedirect() }}
+                    className="flex items-center justify-center gap-2 bg-primary-600 text-white px-5 py-4 rounded-lg font-semibold w-full"
+                  >
+                    <ArrowRight className="w-5 h-5" />
+                    Create Free Account
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Hero */}
-      <section className="pt-32 pb-20 px-4">
+      <section className="pt-24 md:pt-32 pb-12 md:pb-20 px-4">
         <div className="max-w-4xl mx-auto text-center">
           {/* Badge */}
-          <div className="inline-flex items-center gap-2 bg-primary-500/20 text-primary-300 px-4 py-2 rounded-full text-sm font-medium mb-6 border border-primary-500/30">
-            <Award className="w-4 h-4" />
-            Virginia's Most Comprehensive Nursing Resource
+          <div className="inline-flex items-center gap-2 bg-primary-500/20 text-primary-300 px-3 py-1.5 md:px-4 md:py-2 rounded-full text-xs md:text-sm font-medium mb-4 md:mb-6 border border-primary-500/30">
+            <Award className="w-3 h-3 md:w-4 md:h-4" />
+            <span className="hidden sm:inline">Virginia's Most Comprehensive Nursing Resource</span>
+            <span className="sm:hidden">Virginia's #1 Nursing Resource</span>
           </div>
 
-          <h1 className="text-5xl md:text-6xl font-bold text-white mb-6 leading-tight">
-            Find Your Perfect
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4 md:mb-6 leading-tight">
+            Your Complete
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-400 to-accent-400">
-              {' '}Nursing Job{' '}
+              {' '}Nursing Career{' '}
             </span>
-            in Virginia
+            Platform for Virginia
           </h1>
-          <p className="text-xl text-slate-300 mb-4 max-w-2xl mx-auto">
-            <span className="text-white font-semibold">{stats?.total_jobs?.toLocaleString() || '2,700+'} jobs</span> across <span className="text-white font-semibold">{stats?.total_facilities || '387'} facilities</span> with <span className="text-white font-semibold">13 quality indices</span>.
-            No other platform gives you this level of insight.
+          <p className="text-base md:text-xl text-slate-300 mb-3 md:mb-4 max-w-2xl mx-auto">
+            <span className="text-white font-semibold">{stats?.total_jobs?.toLocaleString() || '2,700+'} jobs</span> across <span className="text-white font-semibold">{stats?.total_facilities || '389'} facilities</span> with <span className="text-white font-semibold">13 quality indices</span> — how do they stack up?
           </p>
-          <p className="text-slate-400 mb-6 max-w-xl mx-auto">
+          <p className="text-sm md:text-base text-slate-400 mb-6 max-w-xl mx-auto hidden sm:block">
             Whether you're a new grad, looking for better opportunities, researching facilities for a loved one,
             or exploring a nursing career - we have you covered.
           </p>
@@ -151,75 +332,75 @@ export default function Landing() {
       </section>
 
       {/* Stats */}
-      <section className="py-16 px-4 bg-white/5 backdrop-blur">
+      <section className="py-10 md:py-16 px-4 bg-white/5 backdrop-blur">
         <div className="max-w-5xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8">
             <div className="text-center">
-              <div className="text-4xl font-bold text-white mb-2">
+              <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-1 md:mb-2">
                 {stats?.total_jobs?.toLocaleString() || '2,700+'}
               </div>
-              <div className="text-slate-400">Active Jobs</div>
+              <div className="text-xs sm:text-sm text-slate-400">Active Jobs</div>
             </div>
             <div className="text-center">
-              <div className="text-4xl font-bold text-white mb-2">
+              <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-1 md:mb-2">
                 {stats?.total_facilities?.toLocaleString() || '150+'}
               </div>
-              <div className="text-slate-400">Facilities Ranked</div>
+              <div className="text-xs sm:text-sm text-slate-400">Facilities Ranked</div>
             </div>
             <div className="text-center">
-              <div className="text-4xl font-bold text-white mb-2">7</div>
-              <div className="text-slate-400">Virginia Regions</div>
+              <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-1 md:mb-2">7</div>
+              <div className="text-xs sm:text-sm text-slate-400">Virginia Regions</div>
             </div>
             <div className="text-center">
-              <div className="text-4xl font-bold text-white mb-2">13</div>
-              <div className="text-slate-400">Scoring Indexes</div>
+              <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-1 md:mb-2">13</div>
+              <div className="text-xs sm:text-sm text-slate-400">Scoring Indexes</div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Free Benefits Section */}
-      <section className="py-20 px-4">
+      <section className="py-12 md:py-20 px-4">
         <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-white mb-4">Free with Your Account</h2>
-            <p className="text-xl text-slate-300">Start exploring Virginia's nursing opportunities today</p>
+          <div className="text-center mb-8 md:mb-12">
+            <h2 className="text-2xl md:text-3xl font-bold text-white mb-3 md:mb-4">Free with Your Account</h2>
+            <p className="text-base md:text-xl text-slate-300">Start exploring Virginia's nursing opportunities</p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="bg-gradient-to-br from-emerald-600/20 to-emerald-800/20 backdrop-blur rounded-xl p-6 border border-emerald-500/30 text-center">
-              <div className="w-14 h-14 bg-emerald-500/30 rounded-xl flex items-center justify-center mx-auto mb-4">
-                <Search className="w-7 h-7 text-emerald-300" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
+            <div className="bg-gradient-to-br from-emerald-600/20 to-emerald-800/20 backdrop-blur rounded-xl p-4 md:p-6 border border-emerald-500/30 text-center">
+              <div className="w-10 h-10 md:w-14 md:h-14 bg-emerald-500/30 rounded-xl flex items-center justify-center mx-auto mb-3 md:mb-4">
+                <Search className="w-5 h-5 md:w-7 md:h-7 text-emerald-300" />
               </div>
-              <h3 className="font-semibold text-white mb-2">Browse All Jobs</h3>
-              <p className="text-sm text-slate-400">
-                View {stats?.total_jobs?.toLocaleString() || '2,700+'} nursing jobs across Virginia
+              <h3 className="font-semibold text-white text-sm md:text-base mb-1 md:mb-2">Browse All Jobs</h3>
+              <p className="text-xs md:text-sm text-slate-400 hidden sm:block">
+                View {stats?.total_jobs?.toLocaleString() || '2,700+'} nursing jobs
               </p>
             </div>
-            <div className="bg-gradient-to-br from-primary-600/20 to-primary-800/20 backdrop-blur rounded-xl p-6 border border-primary-500/30 text-center">
-              <div className="w-14 h-14 bg-primary-500/30 rounded-xl flex items-center justify-center mx-auto mb-4">
-                <Users className="w-7 h-7 text-primary-300" />
+            <div className="bg-gradient-to-br from-primary-600/20 to-primary-800/20 backdrop-blur rounded-xl p-4 md:p-6 border border-primary-500/30 text-center">
+              <div className="w-10 h-10 md:w-14 md:h-14 bg-primary-500/30 rounded-xl flex items-center justify-center mx-auto mb-3 md:mb-4">
+                <Users className="w-5 h-5 md:w-7 md:h-7 text-primary-300" />
               </div>
-              <h3 className="font-semibold text-white mb-2">Nurse Community</h3>
-              <p className="text-sm text-slate-400">
-                Connect with Virginia nurses, share experiences
+              <h3 className="font-semibold text-white text-sm md:text-base mb-1 md:mb-2">Nurse Community</h3>
+              <p className="text-xs md:text-sm text-slate-400 hidden sm:block">
+                Connect with Virginia nurses
               </p>
             </div>
-            <div className="bg-gradient-to-br from-accent-600/20 to-accent-800/20 backdrop-blur rounded-xl p-6 border border-accent-500/30 text-center">
-              <div className="w-14 h-14 bg-accent-500/30 rounded-xl flex items-center justify-center mx-auto mb-4">
-                <Newspaper className="w-7 h-7 text-accent-300" />
+            <div className="bg-gradient-to-br from-accent-600/20 to-accent-800/20 backdrop-blur rounded-xl p-4 md:p-6 border border-accent-500/30 text-center">
+              <div className="w-10 h-10 md:w-14 md:h-14 bg-accent-500/30 rounded-xl flex items-center justify-center mx-auto mb-3 md:mb-4">
+                <Newspaper className="w-5 h-5 md:w-7 md:h-7 text-accent-300" />
               </div>
-              <h3 className="font-semibold text-white mb-2">Healthcare News</h3>
-              <p className="text-sm text-slate-400">
-                Stay updated on Virginia healthcare trends
+              <h3 className="font-semibold text-white text-sm md:text-base mb-1 md:mb-2">Healthcare News</h3>
+              <p className="text-xs md:text-sm text-slate-400 hidden sm:block">
+                Stay updated on VA trends
               </p>
             </div>
-            <div className="bg-gradient-to-br from-rose-600/20 to-rose-800/20 backdrop-blur rounded-xl p-6 border border-rose-500/30 text-center">
-              <div className="w-14 h-14 bg-rose-500/30 rounded-xl flex items-center justify-center mx-auto mb-4">
-                <Heart className="w-7 h-7 text-rose-300" />
+            <div className="bg-gradient-to-br from-rose-600/20 to-rose-800/20 backdrop-blur rounded-xl p-4 md:p-6 border border-rose-500/30 text-center">
+              <div className="w-10 h-10 md:w-14 md:h-14 bg-rose-500/30 rounded-xl flex items-center justify-center mx-auto mb-3 md:mb-4">
+                <Heart className="w-5 h-5 md:w-7 md:h-7 text-rose-300" />
               </div>
-              <h3 className="font-semibold text-white mb-2">Save 1 Job</h3>
-              <p className="text-sm text-slate-400">
-                Save your top choice for easy access
+              <h3 className="font-semibold text-white text-sm md:text-base mb-1 md:mb-2">Save 1 Job</h3>
+              <p className="text-xs md:text-sm text-slate-400 hidden sm:block">
+                Save your top choice
               </p>
             </div>
           </div>
@@ -234,6 +415,92 @@ export default function Landing() {
               </button>
             </div>
           )}
+        </div>
+      </section>
+
+      {/* 13-Index Facility Scoring System (Exclusive Feature) */}
+      <section className="py-20 px-4 bg-gradient-to-br from-emerald-900/30 via-slate-900 to-primary-900/30">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 bg-emerald-500/20 text-emerald-300 px-4 py-2 rounded-full text-sm font-medium mb-6">
+              <Award className="w-4 h-4" />
+              Exclusive Feature
+            </div>
+            <h2 className="text-4xl font-bold text-white mb-4">
+              Our 13-Index Facility Scoring System
+            </h2>
+            <p className="text-xl text-slate-300 max-w-3xl mx-auto">
+              Know exactly what you're getting into before you apply. Our comprehensive scoring system
+              analyzes real data to give you the full picture of every Virginia healthcare facility.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3 mb-8 md:mb-12">
+            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-3 text-center hover:border-emerald-500/30 transition-colors">
+              <h4 className="font-semibold text-white text-sm mb-1">PCI</h4>
+              <p className="text-[10px] text-slate-400">Patient Care Index</p>
+            </div>
+            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-3 text-center hover:border-emerald-500/30 transition-colors">
+              <h4 className="font-semibold text-white text-sm mb-1">ALI</h4>
+              <p className="text-[10px] text-slate-400">Administrative Leadership</p>
+            </div>
+            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-3 text-center hover:border-emerald-500/30 transition-colors">
+              <h4 className="font-semibold text-white text-sm mb-1">CSI</h4>
+              <p className="text-[10px] text-slate-400">Clinical Standards</p>
+            </div>
+            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-3 text-center hover:border-emerald-500/30 transition-colors">
+              <h4 className="font-semibold text-white text-sm mb-1">CCI</h4>
+              <p className="text-[10px] text-slate-400">Compensation & Benefits</p>
+            </div>
+            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-3 text-center hover:border-emerald-500/30 transition-colors">
+              <h4 className="font-semibold text-white text-sm mb-1">LSSI</h4>
+              <p className="text-[10px] text-slate-400">Life-Shift Scheduling</p>
+            </div>
+            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-3 text-center hover:border-emerald-500/30 transition-colors">
+              <h4 className="font-semibold text-white text-sm mb-1">QLI</h4>
+              <p className="text-[10px] text-slate-400">Quality of Life</p>
+            </div>
+            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-3 text-center hover:border-emerald-500/30 transition-colors">
+              <h4 className="font-semibold text-white text-sm mb-1">PEI</h4>
+              <p className="text-[10px] text-slate-400">Professional Education</p>
+            </div>
+            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-3 text-center hover:border-emerald-500/30 transition-colors">
+              <h4 className="font-semibold text-white text-sm mb-1">FSI</h4>
+              <p className="text-[10px] text-slate-400">Facility & Safety</p>
+            </div>
+            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-3 text-center hover:border-emerald-500/30 transition-colors">
+              <h4 className="font-semibold text-white text-sm mb-1">ERI</h4>
+              <p className="text-[10px] text-slate-400">Employee Retention</p>
+            </div>
+            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-3 text-center hover:border-emerald-500/30 transition-colors">
+              <h4 className="font-semibold text-white text-sm mb-1">JTI</h4>
+              <p className="text-[10px] text-slate-400">Job Transparency</p>
+            </div>
+            <div className="bg-gradient-to-br from-sky-600/30 to-primary-600/30 backdrop-blur border border-sky-500/50 rounded-xl p-3 text-center hover:border-sky-400 transition-colors relative">
+              <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 bg-sky-500 text-white text-[8px] font-bold rounded-full">NEW</span>
+              <h4 className="font-semibold text-white text-sm mb-1">OII</h4>
+              <p className="text-[10px] text-slate-400">Opportunity Insights</p>
+            </div>
+            <div className="bg-gradient-to-br from-emerald-600/30 to-primary-600/30 backdrop-blur border border-emerald-500/50 rounded-xl p-3 text-center hover:border-emerald-400 transition-colors">
+              <h4 className="font-semibold text-white text-sm mb-1">OFS</h4>
+              <p className="text-[10px] text-slate-400">Overall Facility Score</p>
+            </div>
+          </div>
+
+          <div className="bg-white/5 backdrop-blur border border-emerald-500/30 rounded-2xl p-8 text-center">
+            <p className="text-slate-300 max-w-2xl mx-auto mb-8">
+              All 13 indexes combine into a single A-F grade so you can quickly compare facilities.
+              Create an account to unlock full breakdowns of all indexes for any facility.
+            </p>
+            <Link
+              to="/scoring"
+              className="inline-flex items-center gap-2 bg-emerald-600 text-white px-8 py-4 rounded-xl text-lg font-semibold hover:bg-emerald-700 transition-colors"
+            >
+              <Award className="w-5 h-5" />
+              Learn How We Score Facilities
+              <ArrowRight className="w-5 h-5" />
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -519,38 +786,37 @@ export default function Landing() {
               )}
             </div>
             <div className="relative">
-              {/* Mock Chat Preview */}
-              <div className="bg-slate-800/80 backdrop-blur border border-white/10 rounded-2xl p-6 shadow-2xl">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-accent-500 rounded-full flex items-center justify-center">
-                    <MessageCircle className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <div className="font-semibold text-white">Sully</div>
-                    <div className="text-xs text-emerald-400">Online</div>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <div className="bg-slate-700/50 rounded-2xl rounded-tl-none p-4 max-w-[85%]">
-                    <p className="text-slate-200 text-sm">
-                      Hey! I'm Sully, your nursing career assistant. I can help you find the perfect job,
-                      compare facilities, or answer any questions about Virginia's healthcare landscape.
-                      What would you like to know?
-                    </p>
-                  </div>
-                  <div className="bg-primary-600 rounded-2xl rounded-tr-none p-4 max-w-[85%] ml-auto">
-                    <p className="text-white text-sm">
-                      What are the best hospitals in Northern Virginia for ICU nurses?
-                    </p>
-                  </div>
-                  <div className="bg-slate-700/50 rounded-2xl rounded-tl-none p-4 max-w-[85%]">
-                    <p className="text-slate-200 text-sm">
-                      Great question! Based on our OFS scores, Inova Fairfax ranks highest for ICU with an A rating.
-                      They have great nurse-to-patient ratios and strong Magnet status...
-                    </p>
-                  </div>
+              {/* Simple Sign-In Card */}
+              <div className="bg-slate-800/80 backdrop-blur border border-white/10 rounded-2xl shadow-2xl overflow-hidden p-8 text-center">
+                {/* Sully Avatar */}
+                <img
+                  src="/media/sully/sully-neutral.jpg"
+                  alt="Sully"
+                  className="w-24 h-24 rounded-full object-cover mx-auto mb-6 border-4 border-primary-500/30"
+                />
+
+                <h3 className="text-2xl font-bold text-white mb-3">Meet Sully</h3>
+                <p className="text-slate-300 mb-6">
+                  Your AI nursing career assistant. Get personalized advice, facility insights, and job recommendations.
+                </p>
+
+                <div className="space-y-3">
+                  <button
+                    onClick={() => auth.signinRedirect()}
+                    className="w-full flex items-center justify-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-primary-700 transition-colors"
+                  >
+                    <LogIn className="w-5 h-5" />
+                    Create Free Account
+                  </button>
+                  <p className="text-xs text-slate-400">
+                    Already have an account?{' '}
+                    <button onClick={() => auth.signinRedirect()} className="text-primary-400 hover:text-primary-300 underline">
+                      Sign In
+                    </button>
+                  </p>
                 </div>
               </div>
+
               {/* Decorative elements */}
               <div className="absolute -top-4 -right-4 w-20 h-20 bg-primary-500/20 rounded-full blur-xl" />
               <div className="absolute -bottom-4 -left-4 w-32 h-32 bg-accent-500/20 rounded-full blur-xl" />
@@ -613,33 +879,33 @@ export default function Landing() {
       )}
 
       {/* Testimonials */}
-      <section className="py-16 px-4 overflow-hidden">
+      <section className="py-10 md:py-16 px-4 overflow-hidden">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-2xl font-bold text-white text-center mb-8">What Nurses Are Saying</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-white text-center mb-6 md:mb-8">What Nurses Are Saying</h2>
           <div className="relative">
-            <div className="flex animate-scroll gap-6">
+            <div className="flex animate-scroll gap-4 md:gap-6">
               {[
-                { text: "I sure wish I had this when I started my nursing career, how the times have changed!", author: "Brandy A.", role: "RN, 15 years" },
-                { text: "Finally, a site that actually shows you what you're getting into before you apply. The facility scores are a game-changer.", author: "Marcus T.", role: "ICU Nurse, Richmond" },
-                { text: "Used VANurses to find my current job. The salary transparency saved me from lowball offers.", author: "Jennifer L.", role: "ER Nurse, Norfolk" },
-                { text: "As a new grad, comparing facilities was overwhelming. The scoring system made it so much easier.", author: "David K.", role: "New Grad RN" },
-                { text: "Sully helped me prep for my interview and I got the job! Love the AI assistant.", author: "Tamika R.", role: "L&D Nurse" },
-                { text: "I recommend VANurses to every nurse I precept. Such a valuable resource.", author: "Patricia M.", role: "Charge Nurse, NOVA" },
-                { text: "I sure wish I had this when I started my nursing career, how the times have changed!", author: "Brandy A.", role: "RN, 15 years" },
-                { text: "Finally, a site that actually shows you what you're getting into before you apply. The facility scores are a game-changer.", author: "Marcus T.", role: "ICU Nurse, Richmond" },
+                { text: "I sure wish I had this when I started my nursing career!", author: "Brandy A.", role: "RN, 15 years" },
+                { text: "The facility scores are a game-changer.", author: "Marcus T.", role: "ICU Nurse" },
+                { text: "The salary transparency saved me from lowball offers.", author: "Jennifer L.", role: "ER Nurse" },
+                { text: "The scoring system made it so much easier.", author: "David K.", role: "New Grad RN" },
+                { text: "Sully helped me prep for my interview!", author: "Tamika R.", role: "L&D Nurse" },
+                { text: "I recommend VANurses to every nurse I precept.", author: "Patricia M.", role: "Charge Nurse" },
+                { text: "I sure wish I had this when I started my nursing career!", author: "Brandy A.", role: "RN, 15 years" },
+                { text: "The facility scores are a game-changer.", author: "Marcus T.", role: "ICU Nurse" },
               ].map((testimonial, i) => (
                 <div
                   key={i}
-                  className="flex-shrink-0 w-80 bg-white/5 backdrop-blur border border-white/10 rounded-xl p-6"
+                  className="flex-shrink-0 w-64 sm:w-72 md:w-80 bg-white/5 backdrop-blur border border-white/10 rounded-xl p-4 md:p-6"
                 >
-                  <p className="text-slate-300 text-sm mb-4 italic">"{testimonial.text}"</p>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-accent-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                  <p className="text-slate-300 text-xs md:text-sm mb-3 md:mb-4 italic">"{testimonial.text}"</p>
+                  <div className="flex items-center gap-2 md:gap-3">
+                    <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-primary-500 to-accent-500 rounded-full flex items-center justify-center text-white font-bold text-xs md:text-sm">
                       {testimonial.author.split(' ').map(n => n[0]).join('')}
                     </div>
                     <div>
-                      <p className="text-white font-medium text-sm">{testimonial.author}</p>
-                      <p className="text-slate-500 text-xs">{testimonial.role}</p>
+                      <p className="text-white font-medium text-xs md:text-sm">{testimonial.author}</p>
+                      <p className="text-slate-500 text-[10px] md:text-xs">{testimonial.role}</p>
                     </div>
                   </div>
                 </div>
@@ -705,108 +971,6 @@ export default function Landing() {
                 Built by a nurse, for nurses like you.
               </p>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Facility Scoring System */}
-      <section className="py-20 px-4 bg-gradient-to-br from-emerald-900/30 via-slate-900 to-primary-900/30">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 bg-emerald-500/20 text-emerald-300 px-4 py-2 rounded-full text-sm font-medium mb-6">
-              <Award className="w-4 h-4" />
-              Exclusive Feature
-            </div>
-            <h2 className="text-4xl font-bold text-white mb-4">
-              Our 13-Index Facility Scoring System
-            </h2>
-            <p className="text-xl text-slate-300 max-w-3xl mx-auto">
-              Know exactly what you're getting into before you apply. Our comprehensive scoring system
-              analyzes real data to give you the full picture of every Virginia healthcare facility.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-4 mb-12">
-            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-4 text-center hover:border-emerald-500/30 transition-colors">
-              <Shield className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
-              <h4 className="font-semibold text-white text-sm mb-1">PCI</h4>
-              <p className="text-xs text-slate-400">Patient Care Index</p>
-            </div>
-            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-4 text-center hover:border-emerald-500/30 transition-colors">
-              <Smile className="w-8 h-8 text-primary-400 mx-auto mb-2" />
-              <h4 className="font-semibold text-white text-sm mb-1">ALI</h4>
-              <p className="text-xs text-slate-400">Administrative Leadership</p>
-            </div>
-            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-4 text-center hover:border-emerald-500/30 transition-colors">
-              <Star className="w-8 h-8 text-amber-400 mx-auto mb-2" />
-              <h4 className="font-semibold text-white text-sm mb-1">CSI</h4>
-              <p className="text-xs text-slate-400">Clinical Standards</p>
-            </div>
-            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-4 text-center hover:border-emerald-500/30 transition-colors">
-              <DollarSign className="w-8 h-8 text-green-400 mx-auto mb-2" />
-              <h4 className="font-semibold text-white text-sm mb-1">CCI</h4>
-              <p className="text-xs text-slate-400">Compensation & Benefits</p>
-            </div>
-            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-4 text-center hover:border-emerald-500/30 transition-colors">
-              <Clock className="w-8 h-8 text-blue-400 mx-auto mb-2" />
-              <h4 className="font-semibold text-white text-sm mb-1">LSSI</h4>
-              <p className="text-xs text-slate-400">Life-Shift Scheduling</p>
-            </div>
-            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-4 text-center hover:border-emerald-500/30 transition-colors">
-              <Activity className="w-8 h-8 text-rose-400 mx-auto mb-2" />
-              <h4 className="font-semibold text-white text-sm mb-1">QLI</h4>
-              <p className="text-xs text-slate-400">Quality of Life</p>
-            </div>
-            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-4 text-center hover:border-emerald-500/30 transition-colors">
-              <TrendingUp className="w-8 h-8 text-purple-400 mx-auto mb-2" />
-              <h4 className="font-semibold text-white text-sm mb-1">PEI</h4>
-              <p className="text-xs text-slate-400">Professional Education</p>
-            </div>
-            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-4 text-center hover:border-emerald-500/30 transition-colors">
-              <Building2 className="w-8 h-8 text-cyan-400 mx-auto mb-2" />
-              <h4 className="font-semibold text-white text-sm mb-1">FSI</h4>
-              <p className="text-xs text-slate-400">Facility & Safety</p>
-            </div>
-            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-4 text-center hover:border-emerald-500/30 transition-colors">
-              <Heart className="w-8 h-8 text-pink-400 mx-auto mb-2" />
-              <h4 className="font-semibold text-white text-sm mb-1">ERI</h4>
-              <p className="text-xs text-slate-400">Employee Retention</p>
-            </div>
-            <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-4 text-center hover:border-emerald-500/30 transition-colors">
-              <CheckCircle className="w-8 h-8 text-teal-400 mx-auto mb-2" />
-              <h4 className="font-semibold text-white text-sm mb-1">JTI</h4>
-              <p className="text-xs text-slate-400">Job Transparency</p>
-            </div>
-            <div className="bg-gradient-to-br from-sky-600/30 to-primary-600/30 backdrop-blur border border-sky-500/50 rounded-xl p-4 text-center hover:border-sky-400 transition-colors relative">
-              <span className="absolute -top-2 -right-2 px-2 py-0.5 bg-sky-500 text-white text-[10px] font-bold rounded-full">NEW</span>
-              <TrendingUp className="w-8 h-8 text-sky-400 mx-auto mb-2" />
-              <h4 className="font-semibold text-white text-sm mb-1">OII</h4>
-              <p className="text-xs text-slate-400">Opportunity Insights</p>
-            </div>
-          </div>
-
-          <div className="bg-white/5 backdrop-blur border border-emerald-500/30 rounded-2xl p-8 text-center">
-            <div className="flex items-center justify-center gap-4 mb-6">
-              <div className="flex -space-x-2">
-                <span className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center text-white text-lg font-bold border-2 border-slate-900">A</span>
-                <span className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center text-white text-lg font-bold border-2 border-slate-900">B</span>
-                <span className="w-12 h-12 bg-amber-500 rounded-full flex items-center justify-center text-white text-lg font-bold border-2 border-slate-900">C</span>
-              </div>
-              <ArrowRight className="w-6 h-6 text-slate-400" />
-              <span className="text-3xl font-bold text-white">Overall Facility Score</span>
-            </div>
-            <p className="text-slate-300 max-w-2xl mx-auto mb-8">
-              All 13 indexes combine into a single A-F grade so you can quickly compare facilities.
-              Create an account to unlock full breakdowns of all indexes for any facility.
-            </p>
-            <Link
-              to="/scoring"
-              className="inline-flex items-center gap-2 bg-emerald-600 text-white px-8 py-4 rounded-xl text-lg font-semibold hover:bg-emerald-700 transition-colors"
-            >
-              <Award className="w-5 h-5" />
-              Learn How We Score Facilities
-              <ArrowRight className="w-5 h-5" />
-            </Link>
           </div>
         </div>
       </section>

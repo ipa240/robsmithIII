@@ -34,8 +34,16 @@ export default function Profile() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [editingPrefs, setEditingPrefs] = useState(false)
+
+  // Redirect to login if not authenticated
+  if (!auth.isAuthenticated && !auth.isLoading) {
+    auth.signinRedirect()
+    return null
+  }
   const [priorities, setPriorities] = useState<Record<string, number>>({})
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [editingZip, setEditingZip] = useState(false)
+  const [zipCode, setZipCode] = useState('')
 
   useEffect(() => {
     if (auth.user?.access_token) {
@@ -77,12 +85,35 @@ export default function Profile() {
     }
   })
 
-  // Initialize priorities when preferences load
+  // Initialize priorities and zip when preferences load
   useEffect(() => {
     if (preferences?.index_priorities) {
       setPriorities(preferences.index_priorities)
     }
+    if (preferences?.location_zip) {
+      setZipCode(preferences.location_zip)
+    }
   }, [preferences])
+
+  const updateZipMutation = useMutation({
+    mutationFn: (zip: string) => api.put('/api/me/preferences', {
+      ...preferences,
+      location_zip: zip
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['preferences'] })
+      setEditingZip(false)
+    }
+  })
+
+  const handleSaveZip = () => {
+    // Validate zip code format (5 digits)
+    if (!/^\d{5}$/.test(zipCode)) {
+      alert('Please enter a valid 5-digit zip code')
+      return
+    }
+    updateZipMutation.mutate(zipCode)
+  }
 
   const tier = user?.tier || 'free'
   const changesUsed = preferences?.preference_changes_count || 0
@@ -148,15 +179,50 @@ export default function Profile() {
             )}
           </div>
 
-          {preferences?.location_zip && (
-            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
-              <MapPin className="w-5 h-5 text-slate-400" />
-              <div>
-                <div className="text-sm text-slate-500">Location</div>
-                <div className="font-medium">{preferences.location_zip}</div>
-              </div>
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+            <MapPin className="w-5 h-5 text-slate-400" />
+            <div className="flex-1">
+              <div className="text-sm text-slate-500">Location (Zip Code)</div>
+              {editingZip ? (
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="text"
+                    value={zipCode}
+                    onChange={(e) => setZipCode(e.target.value.replace(/\D/g, '').slice(0, 5))}
+                    placeholder="Enter zip code"
+                    className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm w-28 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    autoFocus
+                  />
+                  <button
+                    onClick={handleSaveZip}
+                    disabled={updateZipMutation.isPending}
+                    className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                  >
+                    <Check className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingZip(false)
+                      setZipCode(preferences?.location_zip || '')
+                    }}
+                    className="p-1.5 text-slate-500 hover:bg-slate-100 rounded"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="font-medium">{preferences?.location_zip || 'Not set'}</div>
+              )}
             </div>
-          )}
+            {!editingZip && (
+              <button
+                onClick={() => setEditingZip(true)}
+                className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg"
+              >
+                <Edit2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
 
           <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
             <Shield className="w-5 h-5 text-slate-400" />

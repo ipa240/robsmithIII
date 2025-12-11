@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from ..database import get_db
-from ..auth.zitadel import get_current_user, CurrentUser
+from ..auth.zitadel import get_current_user_with_db, CurrentUser
 
 router = APIRouter(prefix="/api/hr", tags=["hr"])
 
@@ -63,7 +63,7 @@ def get_user_facility(db: Session, user_id: str) -> Optional[str]:
 @router.get("/stats")
 async def get_hr_stats(
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Get facility HR statistics from database"""
     if not current_user or not current_user.user_id:
@@ -121,7 +121,7 @@ async def get_hr_stats(
 @router.get("/claim/status")
 async def get_claim_status(
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Get current user's facility claim status from database"""
     if not current_user or not current_user.user_id:
@@ -154,7 +154,7 @@ async def get_claim_status(
 async def submit_facility_claim(
     request: FacilityClaimRequest,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Submit a claim to represent a facility"""
     if not current_user or not current_user.user_id:
@@ -239,7 +239,7 @@ async def list_hr_jobs(
     search: Optional[str] = None,
     status: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """List jobs for the claimed facility from database"""
     if not current_user or not current_user.user_id:
@@ -293,7 +293,7 @@ async def list_hr_jobs(
 async def create_job(
     request: JobPostingRequest,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Create a new job posting"""
     if not current_user or not current_user.user_id:
@@ -329,7 +329,7 @@ async def create_job(
 async def get_job(
     job_id: str,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Get a specific job posting from database"""
     if not current_user or not current_user.user_id:
@@ -380,7 +380,7 @@ async def update_job(
     title: Optional[str] = None,
     status: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Update a job posting"""
     if not current_user or not current_user.user_id:
@@ -407,7 +407,7 @@ async def update_job(
 async def delete_job(
     job_id: str,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Delete a job posting (set inactive)"""
     if not current_user or not current_user.user_id:
@@ -425,7 +425,7 @@ async def boost_job(
     job_id: str,
     duration_days: int = 7,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Boost a job posting for more visibility"""
     if not current_user or not current_user.user_id:
@@ -449,7 +449,7 @@ async def boost_job(
 async def get_analytics(
     period: str = "30d",
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Get hiring analytics from database"""
     if not current_user or not current_user.user_id:
@@ -507,7 +507,7 @@ async def get_analytics(
 async def get_facility_feedback(
     limit: int = 20,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Get nurse feedback about the facility from database"""
     if not current_user or not current_user.user_id:
@@ -575,7 +575,7 @@ async def respond_to_feedback(
     feedback_id: str,
     response: str,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Respond to nurse feedback"""
     if not current_user or not current_user.user_id:

@@ -317,25 +317,25 @@ export default function Sully() {
         </div>
 
         {/* Search Mode Selector */}
-        <div className="flex items-center gap-3 mt-4">
-          <span className="text-sm text-slate-500 font-medium">Data Source:</span>
+        <div className="flex flex-wrap items-center gap-2 mt-4">
+          <span className="text-xs sm:text-sm text-slate-500 font-medium whitespace-nowrap">Data Source:</span>
           {SEARCH_MODES.map((mode) => {
             const Icon = mode.icon
             return (
               <button
                 key={mode.id}
                 onClick={() => setSearchMode(mode.id)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${
                   searchMode === mode.id
                     ? 'bg-primary-500 text-white shadow-md'
                     : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
                 }`}
                 title={mode.desc}
               >
-                <Icon className="w-4 h-4" />
-                {mode.label}
+                <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+                <span className="whitespace-nowrap">{mode.label}</span>
                 {mode.recommended && searchMode !== mode.id && (
-                  <span className="text-[10px] text-emerald-600 font-bold">Recommended</span>
+                  <span className="text-[9px] sm:text-[10px] text-emerald-600 font-bold hidden sm:inline">Rec</span>
                 )}
               </button>
             )

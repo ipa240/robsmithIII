@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from ..database import get_db
-from ..auth.zitadel import get_current_user, CurrentUser
+from ..auth.zitadel import get_current_user_with_db, CurrentUser
 
 router = APIRouter(prefix="/api/support", tags=["support"])
 
@@ -32,7 +32,7 @@ class TicketResponse(BaseModel):
 @router.get("/tickets")
 async def list_user_tickets(
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Get current user's support tickets from database"""
     if not current_user or not current_user.user_id:
@@ -64,7 +64,7 @@ async def list_user_tickets(
 async def create_ticket(
     request: CreateTicketRequest,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Create a new support ticket"""
     if not current_user or not current_user.user_id:
@@ -110,7 +110,7 @@ async def create_ticket(
 async def get_ticket(
     ticket_id: str,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Get a specific support ticket with messages"""
     if not current_user or not current_user.user_id:
@@ -158,7 +158,7 @@ async def reply_to_ticket(
     ticket_id: str,
     message: str,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Add a reply to a support ticket"""
     if not current_user or not current_user.user_id:
@@ -198,7 +198,7 @@ async def reply_to_ticket(
 async def close_ticket(
     ticket_id: str,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Close a support ticket"""
     if not current_user or not current_user.user_id:

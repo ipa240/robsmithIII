@@ -75,11 +75,14 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
+      {/* Page Header */}
+      <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
+
       {/* Welcome */}
       <div>
-        <h1 className="text-3xl font-bold text-slate-900 mb-2">
+        <h2 className="text-2xl font-bold text-slate-900 mb-2">
           Welcome back, {userName}!
-        </h1>
+        </h2>
         <p className="text-slate-600">
           Here's what's happening in Virginia nursing today.
         </p>
@@ -201,23 +204,24 @@ export default function Dashboard() {
       )}
 
       {/* Recent Jobs */}
-      <div className="relative">
-        {!canSeePremiumContent && (
-          <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] z-10 rounded-xl flex flex-col items-center justify-center">
-            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-2">
-              <Lock className="w-6 h-6 text-slate-400" />
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-slate-900">Recent Jobs</h2>
+          <Link to="/jobs" className="text-primary-600 hover:underline text-sm flex items-center gap-1">
+            View all
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+        <div className="relative">
+          {!canSeePremiumContent && (
+            <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] z-10 rounded-xl flex flex-col items-center justify-center">
+              <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-2">
+                <Lock className="w-6 h-6 text-slate-400" />
+              </div>
+              <span className="text-xs text-slate-500 bg-white/80 px-2 py-1 rounded">Sample Data</span>
             </div>
-            <span className="text-xs text-slate-500 bg-white/80 px-2 py-1 rounded">Sample Data</span>
-          </div>
-        )}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-slate-900">Recent Jobs</h2>
-            <Link to="/jobs" className="text-primary-600 hover:underline text-sm flex items-center gap-1">
-              View all
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
+          )}
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
           <div className="space-y-3">
             {canSeePremiumContent ? (
               recentJobs?.map((job: any) => (
@@ -266,28 +270,30 @@ export default function Dashboard() {
               ))
             )}
           </div>
+          </div>
         </div>
       </div>
 
       {/* Top Facilities */}
-      <div className="relative">
-        {!canSeePremiumContent && (
-          <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] z-10 rounded-xl flex flex-col items-center justify-center">
-            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-2">
-              <Lock className="w-6 h-6 text-slate-400" />
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-slate-900">Top Rated Facilities</h2>
+          <Link to="/facilities" className="text-primary-600 hover:underline text-sm flex items-center gap-1">
+            View all
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+        <div className="relative">
+          {!canSeePremiumContent && (
+            <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] z-10 rounded-xl flex flex-col items-center justify-center">
+              <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-2">
+                <Lock className="w-6 h-6 text-slate-400" />
+              </div>
+              <span className="text-xs text-slate-500 bg-white/80 px-2 py-1 rounded">Sample Data</span>
             </div>
-            <span className="text-xs text-slate-500 bg-white/80 px-2 py-1 rounded">Sample Data</span>
-          </div>
-        )}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-slate-900">Top Rated Facilities</h2>
-            <Link to="/facilities" className="text-primary-600 hover:underline text-sm flex items-center gap-1">
-              View all
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-          <div className="space-y-3">
+          )}
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="space-y-3">
             {canSeePremiumContent ? (
               topFacilities?.map((facility: any) => (
                 <Link
@@ -349,6 +355,7 @@ export default function Dashboard() {
                 </div>
               ))
             )}
+            </div>
           </div>
         </div>
       </div>

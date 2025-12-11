@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { api } from '../api/client'
+import { useAuth } from 'react-oidc-context'
+import { api, setAuthToken } from '../api/client'
 
 // DEV MODE: Set to true to bypass all premium restrictions for testing
 const DEV_MODE = false
@@ -148,12 +149,30 @@ const TIER_FEATURES = {
 
 export function useSubscription() {
   const adminUnlocked = isAdminUnlockedSync()
+  const auth = useAuth()
+  const accessToken = auth.user?.access_token
 
-  const { data, isLoading, refetch } = useQuery<SubscriptionStatus>({
-    queryKey: ['subscription-status'],
-    queryFn: () => api.get('/api/billing/status').then(res => res.data),
-    staleTime: 60000, // Cache for 1 minute
-    enabled: !DEV_MODE && !adminUnlocked,
+  // Ensure auth token is set before any query runs
+  // This is critical - the token must be set synchronously
+  if (accessToken) {
+    setAuthToken(accessToken)
+  }
+
+  const { data, isLoading, isFetched, refetch } = useQuery<SubscriptionStatus>({
+    // Include token presence in query key so it refetches when token changes
+    queryKey: ['subscription-status', !!accessToken],
+    queryFn: () => {
+      // Double-check token is set right before the fetch
+      if (accessToken) {
+        setAuthToken(accessToken)
+      }
+      return api.get('/api/billing/status').then(res => res.data)
+    },
+    staleTime: 30000, // Cache for 30 seconds
+    // Always refetch when component mounts to ensure fresh data
+    refetchOnMount: 'always',
+    // Only enable when auth is loaded AND we have a token
+    enabled: !DEV_MODE && !adminUnlocked && !auth.isLoading && !!accessToken,
     retry: 1,
   })
 
@@ -210,6 +229,7 @@ export function useSubscription() {
     tier,
     tierName: data?.tier_name || 'Free',
     isLoading,
+    isFetched,
     isTrial: data?.is_trial || false,
     trialDaysRemaining,
     trialExpiresAt: data?.trial_ends_at,

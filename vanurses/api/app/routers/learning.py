@@ -8,7 +8,7 @@ from sqlalchemy import text
 import uuid
 
 from ..database import get_db
-from ..auth.zitadel import get_current_user, CurrentUser
+from ..auth.zitadel import get_current_user_with_db, CurrentUser
 
 router = APIRouter(prefix="/api/learning", tags=["learning"])
 
@@ -34,7 +34,7 @@ class CEUUpdate(BaseModel):
 @router.get("/ceus")
 async def list_ceus(
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """List all CEU logs for the current user"""
     if not current_user or not current_user.user_id:
@@ -65,7 +65,7 @@ async def list_ceus(
 async def create_ceu(
     data: CEUCreate,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Log a new CEU"""
     if not current_user or not current_user.user_id:
@@ -113,7 +113,7 @@ async def create_ceu(
 @router.get("/ceus/stats/summary")
 async def get_ceu_stats(
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Get CEU statistics for the current user"""
     if not current_user or not current_user.user_id:
@@ -162,7 +162,7 @@ async def get_ceu_stats(
 async def get_ceu(
     ceu_id: str,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Get a specific CEU log"""
     if not current_user or not current_user.user_id:
@@ -193,7 +193,7 @@ async def update_ceu(
     ceu_id: str,
     data: CEUUpdate,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Update a CEU log"""
     if not current_user or not current_user.user_id:
@@ -251,7 +251,7 @@ async def update_ceu(
 async def delete_ceu(
     ceu_id: str,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Delete a CEU log"""
     if not current_user or not current_user.user_id:

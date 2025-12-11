@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { useAuth } from 'react-oidc-context'
 import {
   HelpCircle, MessageSquare, Send, ChevronDown, ChevronUp,
   Mail, Clock, CheckCircle, AlertCircle, ExternalLink, Key, Lock, Unlock
@@ -65,6 +66,14 @@ const faqs: FAQ[] = [
 ]
 
 export default function Support() {
+  const auth = useAuth()
+
+  // Redirect to login if not authenticated
+  if (!auth.isAuthenticated && !auth.isLoading) {
+    auth.signinRedirect()
+    return null
+  }
+
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null)
   const [contactForm, setContactForm] = useState({
     subject: '',

@@ -84,7 +84,6 @@ export default function Map() {
   const [selectedFacility, setSelectedFacility] = useState<Facility | null>(null)
   const [filters, setFilters] = useState({
     minGrade: 'F',
-    hasJobs: false,
     region: 'all',
   })
   const [showFilters, setShowFilters] = useState(false)
@@ -96,16 +95,6 @@ export default function Map() {
     queryKey: ['facilities-map'],
     queryFn: () => api.get('/api/facilities?limit=500').then(res => res.data),
   })
-
-  // Fetch global top 3 facilities (always visible for free users)
-  const { data: topFacilities } = useQuery({
-    queryKey: ['top-facilities'],
-    queryFn: () => api.get('/api/facilities?limit=3&min_grade=A').then(res => res.data.data || []),
-  })
-
-  const globalTop3Ids = useMemo(() => {
-    return new Set((topFacilities || []).map((f: any) => f.id))
-  }, [topFacilities])
 
   // Extract facilities array from response
   const facilities: Facility[] = useMemo(() => {
@@ -133,7 +122,6 @@ export default function Map() {
     return facilities.filter(f => {
       // Must have valid coordinates
       if (!f.latitude || !f.longitude) return false
-      if (filters.hasJobs && f.job_count === 0) return false
       const gradeOrder = ['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+']
       if (gradeOrder.indexOf(f.ofs_grade) < gradeOrder.indexOf(filters.minGrade)) return false
       return true
@@ -178,28 +166,26 @@ export default function Map() {
           <div className="flex flex-wrap gap-6">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Minimum Grade</label>
-              <select
-                value={filters.minGrade}
-                onChange={e => setFilters(f => ({ ...f, minGrade: e.target.value }))}
-                className="px-3 py-2 border border-slate-300 rounded-lg"
-              >
-                <option value="F">All Grades</option>
-                <option value="C">C and above</option>
-                <option value="B">B and above</option>
-                <option value="A-">A- and above</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Jobs</label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={filters.hasJobs}
-                  onChange={e => setFilters(f => ({ ...f, hasJobs: e.target.checked }))}
-                  className="w-4 h-4 text-primary-600 rounded"
-                />
-                <span className="text-slate-700">Only with open jobs</span>
-              </label>
+              {canSeeAllScores ? (
+                <select
+                  value={filters.minGrade}
+                  onChange={e => setFilters(f => ({ ...f, minGrade: e.target.value }))}
+                  className="px-3 py-2 border border-slate-300 rounded-lg"
+                >
+                  <option value="F">All Grades</option>
+                  <option value="C">C and above</option>
+                  <option value="B">B and above</option>
+                  <option value="A-">A- and above</option>
+                </select>
+              ) : (
+                <Link
+                  to="/billing#plans"
+                  className="px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-400 flex items-center gap-2 hover:bg-slate-100 transition-colors"
+                >
+                  <Lock className="w-3 h-3" />
+                  <span>Upgrade to filter by grade</span>
+                </Link>
+              )}
             </div>
           </div>
         </div>
@@ -291,12 +277,22 @@ export default function Map() {
                         <div className="text-sm text-slate-600 mb-2">
                           {facility.job_count} open positions
                         </div>
-                        <button
-                          onClick={() => navigate(`/facilities/${facility.id}`)}
-                          className="w-full py-1.5 bg-primary-600 text-white rounded text-sm font-medium hover:bg-primary-700"
-                        >
-                          View Details
-                        </button>
+                        {canSeeScore ? (
+                          <button
+                            onClick={() => navigate(`/facilities/${facility.id}`)}
+                            className="w-full py-1.5 bg-primary-600 text-white rounded text-sm font-medium hover:bg-primary-700"
+                          >
+                            View Details
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => navigate('/billing#plans')}
+                            className="w-full py-1.5 bg-amber-500 text-white rounded text-sm font-medium hover:bg-amber-600 flex items-center justify-center gap-1"
+                          >
+                            <Crown className="w-3 h-3" />
+                            Unlock Scores & Trends
+                          </button>
+                        )}
                       </div>
                     </Popup>
                   </Marker>
@@ -306,7 +302,7 @@ export default function Map() {
           )}
 
           {/* Legend */}
-          <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-md p-3 z-[1000]">
+          <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-md p-3 z-[400]">
             <div className="text-xs font-medium text-slate-700 mb-2">Grade Legend</div>
             <div className="flex gap-2">
               {['A', 'B', 'C', 'D', 'F'].map(grade => (
@@ -321,8 +317,8 @@ export default function Map() {
             </div>
           </div>
 
-          {/* Facilities count */}
-          <div className="absolute top-4 left-4 bg-white rounded-lg shadow-md px-3 py-2 z-[1000]">
+          {/* Facilities count - positioned right to avoid zoom controls */}
+          <div className="absolute top-4 right-4 bg-white rounded-lg shadow-md px-3 py-2 z-[400]">
             <span className="text-sm font-medium text-slate-700">
               {filteredFacilities.length} facilities
             </span>
@@ -377,7 +373,7 @@ export default function Map() {
                             <Crown className="w-4 h-4" />
                             Upgrade to view scores
                           </div>
-                          <Link to="/billing" className="text-xs text-primary-600 hover:underline">
+                          <Link to="/billing#plans" className="text-xs text-primary-600 hover:underline">
                             See plans
                           </Link>
                         </div>
@@ -401,14 +397,24 @@ export default function Map() {
                   </div>
 
                   <div className="flex gap-2">
+                    {canSeeScore ? (
+                      <button
+                        onClick={() => navigate(`/facilities/${selectedFacility.id}`)}
+                        className="flex-1 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700"
+                      >
+                        View Details
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => navigate('/billing#plans')}
+                        className="flex-1 py-2 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 flex items-center justify-center gap-1"
+                      >
+                        <Crown className="w-4 h-4" />
+                        Unlock Scores & Trends
+                      </button>
+                    )}
                     <button
-                      onClick={() => navigate(`/facilities/${selectedFacility.id}`)}
-                      className="flex-1 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700"
-                    >
-                      View Details
-                    </button>
-                    <button
-                      onClick={() => navigate(`/facilities/${selectedFacility.id}#jobs`)}
+                      onClick={() => navigate(`/jobs?facility=${selectedFacility.name}`)}
                       className="flex-1 py-2 border border-slate-300 rounded-lg font-medium hover:bg-slate-50"
                     >
                       View Jobs

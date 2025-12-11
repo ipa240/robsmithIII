@@ -7,7 +7,10 @@ import uuid
 import json
 from datetime import datetime, timedelta
 from ..database import get_db
-from ..utils.normalizer import normalize_to_db, normalize_list_to_db, to_display
+from ..utils.normalizer import (
+    normalize_to_db, normalize_list_to_db, to_display,
+    get_region_db_values, normalize_region
+)
 from ..services.bls_data import get_market_rate
 
 # Import job parser (installed in scraper module)
@@ -43,6 +46,17 @@ async def list_jobs(
     pay_disclosed_only: Optional[bool] = None,
     posted_within_days: Optional[int] = None,
     ofs_grade: Optional[str] = None,
+    childcare: Optional[str] = None,  # "onsite" or "nearby"
+    # Location-based sorting
+    user_lat: Optional[float] = None,
+    user_lng: Optional[float] = None,
+    user_zip: Optional[str] = None,  # Alternative to lat/lng - will be geocoded
+    sort_by_distance: Optional[bool] = None,
+    max_distance_miles: Optional[int] = None,
+    # New enrichment-based filters
+    new_grad_friendly: Optional[bool] = None,
+    bsn_required: Optional[str] = None,  # "yes", "no", or "any"
+    certification: Optional[str] = None,  # e.g., "ACLS", "BLS", "PALS"
 ):
     """Get paginated list of jobs with filters"""
 
@@ -80,8 +94,19 @@ async def list_jobs(
         params["city"] = city
 
     if region:
-        where_clauses.append("f.region = :region")
-        params["region"] = region
+        # Get all DB variants that should match this canonical region
+        # e.g., "Northern Virginia" matches ["nova", "northern_virginia", "Northern Virginia"]
+        region_variants = get_region_db_values(region)
+        if len(region_variants) == 1:
+            where_clauses.append("f.region = :region_0")
+            params["region_0"] = region_variants[0]
+        else:
+            region_conditions = []
+            for i, variant in enumerate(region_variants):
+                param_name = f"region_{i}"
+                params[param_name] = variant
+                region_conditions.append(f"f.region = :{param_name}")
+            where_clauses.append(f"({' OR '.join(region_conditions)})")
 
     if facility_id:
         where_clauses.append("j.facility_id = :facility_id")
@@ -100,42 +125,147 @@ async def list_jobs(
         params["max_pay"] = max_pay
 
     if has_sign_on_bonus:
-        where_clauses.append("j.sign_on_bonus IS NOT NULL AND j.sign_on_bonus > 0")
+        # Check both the column AND the JSON enrichment data (must be > 0)
+        # Use regex to safely check for positive numbers
+        # IMPORTANT: Wrap entire condition in parentheses so AND/OR precedence works correctly
+        where_clauses.append("""(
+            (j.sign_on_bonus IS NOT NULL AND j.sign_on_bonus > 0)
+            OR (j.raw_schema_json->'parsed'->>'sign_on_bonus' IS NOT NULL
+                AND j.raw_schema_json->'parsed'->>'sign_on_bonus' != ''
+                AND j.raw_schema_json->'parsed'->>'sign_on_bonus' != '0'
+                AND j.raw_schema_json->'parsed'->>'sign_on_bonus' ~ '^[1-9][0-9]*$')
+        )""")
 
     if has_relocation:
         where_clauses.append("j.relocation_assistance = true")
 
     if pay_disclosed_only:
-        where_clauses.append("j.pay_disclosed = true")
+        # Check for actual pay data (pay_min or pay_max populated)
+        where_clauses.append("(j.pay_min IS NOT NULL OR j.pay_max IS NOT NULL)")
 
     if posted_within_days:
         where_clauses.append(f"j.posted_at >= NOW() - INTERVAL '{posted_within_days} days'")
 
     if ofs_grade:
-        # OFS grades: A = 90-100, B = 80-89, C = 70-79, D = 60-69, F = <60
-        grade_ranges = {
-            'A': (90, 100),
-            'B': (80, 89),
-            'C': (70, 79),
-            'D': (60, 69),
-            'F': (0, 59),
-        }
-        if ofs_grade.upper() in grade_ranges:
-            min_score, max_score = grade_ranges[ofs_grade.upper()]
-            where_clauses.append(f"fs.ofs_score >= {min_score} AND fs.ofs_score <= {max_score}")
+        # Match on stored ofs_grade string (supports A, B, C, D, F and +/- variants)
+        # e.g., "B" matches "B", "B+", "B-"
+        grade_letter = ofs_grade.upper()[0]  # Get just the letter (A, B, C, D, F)
+        if grade_letter in ['A', 'B', 'C', 'D', 'F']:
+            # Use LIKE to match the grade letter with optional +/- modifier
+            where_clauses.append(f"fs.ofs_grade LIKE '{grade_letter}%'")
+
+    # Childcare filter - joins with facility_amenities table
+    needs_amenities_join = False
+    if childcare:
+        needs_amenities_join = True
+        if childcare == "onsite":
+            where_clauses.append("fa.has_onsite_daycare = true")
+        elif childcare == "nearby":
+            where_clauses.append("fa.childcare_count > 0")
+
+    # New Grad Friendly filter - searches enrichment experience data
+    # Note: Removed "GN " from title pattern as it matches "SiGN On Bonus" (false positives)
+    # GN Program still valid in experience since it's a full phrase
+    if new_grad_friendly:
+        where_clauses.append("""(
+            j.raw_schema_json->'parsed'->>'experience' ~* '(new grad|entry.level|0.year|no experience|graduate nurse|GN program|new graduate)'
+            OR j.title ~* '(new grad|graduate nurse|residency)'
+        )""")
+
+    # BSN Required filter - searches enrichment education data
+    if bsn_required == "yes":
+        where_clauses.append("""
+            j.raw_schema_json->'parsed'->>'education' ~* 'BSN.*(required|preferred|must)'
+        """)
+    elif bsn_required == "no":
+        where_clauses.append("""(
+            j.raw_schema_json->'parsed'->>'education' ~* '(ADN|ASN|Associate).*(accepted|ok|considered)'
+            OR j.raw_schema_json->'parsed'->>'education' NOT LIKE '%BSN%required%'
+        )""")
+
+    # Certification filter - searches enrichment certifications data
+    if certification:
+        params["cert_filter"] = certification.upper()
+        where_clauses.append("""
+            j.raw_schema_json->'parsed'->>'certifications' ~* :cert_filter
+        """)
+
+    # Distance filter - use Haversine formula (miles)
+    # If user_zip is provided, look up coordinates from zip_codes table
+    if user_zip and (user_lat is None or user_lng is None):
+        zip_result = db.execute(
+            text("SELECT latitude, longitude FROM zip_codes WHERE zip_code = :zip"),
+            {"zip": user_zip.strip()}
+        ).fetchone()
+        if zip_result:
+            user_lat = float(zip_result[0])
+            user_lng = float(zip_result[1])
+
+    distance_select = ""
+    distance_filter = ""
+    has_location = user_lat is not None and user_lng is not None
+
+    if has_location:
+        params["user_lat"] = user_lat
+        params["user_lng"] = user_lng
+        # Haversine formula in SQL (returns miles)
+        # Use facility coordinates - they're reliable (387/389 facilities have coords)
+        # Job city data is unreliable (contains hospital names, not actual cities)
+        distance_select = """,
+            CASE
+                WHEN f.latitude IS NOT NULL AND f.longitude IS NOT NULL THEN
+                    3959 * acos(
+                        LEAST(1.0, GREATEST(-1.0,
+                            cos(radians(:user_lat)) * cos(radians(f.latitude)) *
+                            cos(radians(f.longitude) - radians(:user_lng)) +
+                            sin(radians(:user_lat)) * sin(radians(f.latitude))
+                        ))
+                    )
+                ELSE NULL
+            END as distance_miles"""
+
+        # Max distance filter - require facilities to have coordinates
+        # when a max distance is specified (user wants only results within range)
+        if max_distance_miles:
+            params["max_distance"] = max_distance_miles
+            where_clauses.append("""
+                f.latitude IS NOT NULL AND f.longitude IS NOT NULL AND
+                3959 * acos(
+                    LEAST(1.0, GREATEST(-1.0,
+                        cos(radians(:user_lat)) * cos(radians(f.latitude)) *
+                        cos(radians(f.longitude) - radians(:user_lng)) +
+                        sin(radians(:user_lat)) * sin(radians(f.latitude))
+                    ))
+                ) <= :max_distance
+            """)
 
     where_sql = " AND ".join(where_clauses)
+
+    # Build JOIN clause - add facility_amenities only when needed
+    amenities_join = "LEFT JOIN facility_amenities fa ON f.id = fa.facility_id" if needs_amenities_join else ""
+
+    # Determine sort order
+    if sort_by_distance and has_location:
+        order_sql = """
+            ORDER BY
+                CASE WHEN f.latitude IS NULL THEN 1 ELSE 0 END,
+                distance_miles ASC NULLS LAST,
+                j.posted_at DESC NULLS LAST
+        """
+    else:
+        order_sql = "ORDER BY j.posted_at DESC NULLS LAST, j.scraped_at DESC"
 
     # Count query
     count_sql = f"""
         SELECT COUNT(*) FROM jobs j
         LEFT JOIN facilities f ON j.facility_id = f.id
         LEFT JOIN facility_scores fs ON f.id = fs.facility_id
+        {amenities_join}
         WHERE {where_sql}
     """
     total = db.execute(text(count_sql), params).scalar()
 
-    # Main query
+    # Main query - includes enrichment data for display tags
     query = f"""
         SELECT
             j.id, j.title, j.description, j.nursing_type, j.specialty,
@@ -146,14 +276,21 @@ async def list_jobs(
             j.posted_at, j.source_url, j.external_job_id,
             j.facility_id,
             f.name as facility_name, f.region as facility_region,
-            f.system_name as facility_system,
+            f.system_name as facility_system, f.city as facility_city,
             fs.ofs_score as facility_ofs_score,
-            fs.ofs_grade as facility_ofs_grade
+            fs.ofs_grade as facility_ofs_grade,
+            -- Enrichment data for tags
+            j.raw_schema_json->'parsed'->>'education' as education_req,
+            j.raw_schema_json->'parsed'->>'experience' as experience_req,
+            j.raw_schema_json->'parsed'->>'certifications' as certifications_req,
+            j.raw_schema_json->'parsed'->>'sign_on_bonus' as bonus_from_enrichment
+            {distance_select}
         FROM jobs j
         LEFT JOIN facilities f ON j.facility_id = f.id
         LEFT JOIN facility_scores fs ON f.id = fs.facility_id
+        {amenities_join}
         WHERE {where_sql}
-        ORDER BY j.posted_at DESC NULLS LAST, j.scraped_at DESC
+        {order_sql}
         LIMIT :limit OFFSET :offset
     """
 
@@ -164,6 +301,9 @@ async def list_jobs(
         # Add market rate for jobs without disclosed pay
         if not job.get('pay_min') and not job.get('pay_disclosed'):
             job['market_rate'] = get_market_rate(db, job.get('nursing_type'), job.get('city'))
+        # Round distance to 1 decimal place if present
+        if job.get('distance_miles') is not None:
+            job['distance_miles'] = round(job['distance_miles'], 1)
         jobs.append(job)
 
     return {
@@ -342,13 +482,13 @@ async def get_job(job_id: str, db: Session = Depends(get_db)):
             f.state as facility_state, f.career_url as facility_career_url
         FROM jobs j
         LEFT JOIN facilities f ON j.facility_id = f.id
-        WHERE j.id = :job_id
+        WHERE j.id = :job_id AND j.is_active = true
     """
 
     result = db.execute(text(query), {"job_id": job_id}).first()
 
     if not result:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise HTTPException(status_code=404, detail="Job not found or no longer available")
 
     job = dict(result._mapping)
     # Add market rate for jobs without disclosed pay
@@ -376,14 +516,14 @@ async def get_job_details(job_id: str, db: Session = Depends(get_db)):
     """
     # Get job from database with description fallback
     query = """
-        SELECT id, source_url, description, raw_schema_json
+        SELECT id, source_url, description, raw_schema_json, is_active
         FROM jobs
-        WHERE id = :job_id
+        WHERE id = :job_id AND is_active = true
     """
     result = db.execute(text(query), {"job_id": job_id}).first()
 
     if not result:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise HTTPException(status_code=404, detail="Job not found or no longer available")
 
     job = dict(result._mapping)
     raw_schema = job.get('raw_schema_json') or {}
@@ -445,13 +585,13 @@ async def get_job_preview(job_id: str, db: Session = Depends(get_db)):
         FROM jobs j
         LEFT JOIN facilities f ON j.facility_id = f.id
         LEFT JOIN facility_scores fs ON f.id = fs.facility_id
-        WHERE j.id = :job_id
+        WHERE j.id = :job_id AND j.is_active = true
     """
 
     result = db.execute(text(query), {"job_id": job_id}).first()
 
     if not result:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise HTTPException(status_code=404, detail="Job not found or no longer available")
 
     job = dict(result._mapping)
 

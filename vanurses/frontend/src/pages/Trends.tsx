@@ -245,17 +245,17 @@ export default function Trends() {
       </div>
 
       {/* Job Posting Trend Chart */}
-      <div className="relative">
-        {!canSeePremiumContent && (
-          <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] z-10 rounded-xl flex flex-col items-center justify-center">
-            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-2">
-              <Lock className="w-6 h-6 text-slate-400" />
+      <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <h2 className="text-lg font-semibold text-slate-900 mb-4">Job Postings Over Time</h2>
+        <div className="relative">
+          {!canSeePremiumContent && (
+            <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] z-10 rounded-lg flex flex-col items-center justify-center">
+              <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-2">
+                <Lock className="w-6 h-6 text-slate-400" />
+              </div>
+              <span className="text-xs text-slate-500 bg-white/80 px-2 py-1 rounded">Sample Data</span>
             </div>
-            <span className="text-xs text-slate-500 bg-white/80 px-2 py-1 rounded">Sample Data</span>
-          </div>
-        )}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">Job Postings Over Time</h2>
+          )}
           {canSeePremiumContent ? (
             overviewLoading ? (
               <div className="h-64 flex items-center justify-center">
@@ -303,22 +303,22 @@ export default function Trends() {
       </div>
 
       {/* Facility Rankings */}
-      <div className="relative">
-        {!canSeePremiumContent && (
-          <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] z-10 rounded-xl flex flex-col items-center justify-center">
-            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-2">
-              <Lock className="w-6 h-6 text-slate-400" />
-            </div>
-            <span className="text-xs text-slate-500 bg-white/80 px-2 py-1 rounded">Sample Data</span>
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* Rising Facilities */}
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="p-4 border-b border-slate-200 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-emerald-500" />
+            <h2 className="font-semibold text-slate-900">Top Rated Facilities</h2>
           </div>
-        )}
-        <div className="grid lg:grid-cols-2 gap-6">
-          {/* Rising Facilities */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="p-4 border-b border-slate-200 flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-emerald-500" />
-              <h2 className="font-semibold text-slate-900">Top Rated Facilities</h2>
-            </div>
+          <div className="relative">
+            {!canSeePremiumContent && (
+              <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center">
+                <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center mb-2">
+                  <Lock className="w-5 h-5 text-slate-400" />
+                </div>
+                <span className="text-xs text-slate-500 bg-white/80 px-2 py-1 rounded">Sample Data</span>
+              </div>
+            )}
             {canSeePremiumContent ? (
               risingLoading ? (
                 <div className="p-8 flex justify-center">
@@ -370,13 +370,23 @@ export default function Trends() {
               </div>
             )}
           </div>
+        </div>
 
-          {/* Falling Facilities */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="p-4 border-b border-slate-200 flex items-center gap-2">
-              <TrendingDown className="w-5 h-5 text-red-500" />
-              <h2 className="font-semibold text-slate-900">Lower Rated Facilities</h2>
-            </div>
+        {/* Falling Facilities */}
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="p-4 border-b border-slate-200 flex items-center gap-2">
+            <TrendingDown className="w-5 h-5 text-red-500" />
+            <h2 className="font-semibold text-slate-900">Lower Rated Facilities</h2>
+          </div>
+          <div className="relative">
+            {!canSeePremiumContent && (
+              <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center">
+                <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center mb-2">
+                  <Lock className="w-5 h-5 text-slate-400" />
+                </div>
+                <span className="text-xs text-slate-500 bg-white/80 px-2 py-1 rounded">Sample Data</span>
+              </div>
+            )}
             {canSeePremiumContent ? (
               fallingLoading ? (
                 <div className="p-8 flex justify-center">
@@ -432,17 +442,17 @@ export default function Trends() {
       </div>
 
       {/* Specialty Demand */}
-      <div className="relative">
-        {!canSeePremiumContent && (
-          <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] z-10 rounded-xl flex flex-col items-center justify-center">
-            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-2">
-              <Lock className="w-6 h-6 text-slate-400" />
+      <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <h2 className="text-lg font-semibold text-slate-900 mb-4">Specialty Demand</h2>
+        <div className="relative">
+          {!canSeePremiumContent && (
+            <div className="absolute inset-0 bg-white/40 backdrop-blur-[2px] z-10 rounded-lg flex flex-col items-center justify-center">
+              <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-2">
+                <Lock className="w-6 h-6 text-slate-400" />
+              </div>
+              <span className="text-xs text-slate-500 bg-white/80 px-2 py-1 rounded">Sample Data</span>
             </div>
-            <span className="text-xs text-slate-500 bg-white/80 px-2 py-1 rounded">Sample Data</span>
-          </div>
-        )}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">Specialty Demand</h2>
+          )}
           {canSeePremiumContent ? (
             specialtiesLoading ? (
               <div className="flex justify-center py-8">

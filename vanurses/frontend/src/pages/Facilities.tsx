@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, useRef, useEffect } from 'react'
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Search, MapPin, Building2, Briefcase, Star, ChevronLeft, ChevronRight, Filter, X, SlidersHorizontal, Lock, TrendingUp, ArrowRight, Crown, Radio, RefreshCw } from 'lucide-react'
+import { Search, MapPin, Building2, Briefcase, Star, ChevronLeft, ChevronRight, ChevronUp, X, SlidersHorizontal, Lock, TrendingUp, Crown, RefreshCw } from 'lucide-react'
 import { api } from '../api/client'
 import { toTitleCase } from '../utils/format'
 import { useAuth } from 'react-oidc-context'
@@ -43,10 +43,22 @@ export default function Facilities() {
   const [search, setSearch] = useState('')
   const [region, setRegion] = useState('')
   const [system, setSystem] = useState('')
+  const [facilityId, setFacilityId] = useState('')
   const [minGrade, setMinGrade] = useState('')
+  const [excludeNursingHomes, setExcludeNursingHomes] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
-  const [page, setPage] = useState(0)
+  const [currentPage, setCurrentPage] = useState(1)
   const limit = 20
+
+  // Distance/location state
+  const [distanceMode, setDistanceMode] = useState<'none' | 'profile' | 'custom'>('none')
+  const [customZip, setCustomZip] = useState('')
+  const [maxDistance, setMaxDistance] = useState('')
+
+  // Refs for infinite scroll
+  const loadMoreRef = useRef<HTMLDivElement>(null)
+  const facilitiesContainerRef = useRef<HTMLDivElement>(null)
+  const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map())
 
   // Free user visibility limit
   const FREE_VISIBLE_COUNT = 3
@@ -61,7 +73,30 @@ export default function Facilities() {
     queryFn: () => api.get('/api/facilities/systems').then(res => res.data.data)
   })
 
-  // Latest scores - top rated facilities (also used for global top 3)
+  const { data: facilityNames } = useQuery({
+    queryKey: ['facility-names'],
+    queryFn: () => api.get('/api/facilities/names').then(res => res.data.data)
+  })
+
+  // Fetch user preferences to get their location_zip
+  const { data: userPrefs } = useQuery({
+    queryKey: ['user-preferences'],
+    queryFn: () => api.get('/api/me/preferences').then(res => res.data),
+    enabled: auth.isAuthenticated
+  })
+
+  // Get location zip code based on distance mode
+  const getLocationZip = () => {
+    if (distanceMode === 'profile' && userPrefs?.location_zip) {
+      return userPrefs.location_zip
+    } else if (distanceMode === 'custom' && customZip && customZip.length === 5) {
+      return customZip
+    }
+    return null
+  }
+  const locationZip = getLocationZip()
+
+  // Latest scores - top rated facilities for the banner
   const { data: latestScores } = useQuery({
     queryKey: ['latest-scores'],
     queryFn: () => api.get('/api/facilities', {
@@ -69,37 +104,126 @@ export default function Facilities() {
     }).then(res => res.data.data)
   })
 
-  // Get IDs of global top 3 facilities (always visible for free users)
-  const globalTop3Ids = new Set(
-    (latestScores || []).slice(0, 3).map((f: any) => f.id)
-  )
-
-  const activeFilters = [region, system, minGrade].filter(Boolean).length
+  const activeFilters = [region, system, facilityId, minGrade, distanceMode !== 'none' ? 'distance' : ''].filter(Boolean).length
 
   const clearAllFilters = () => {
     setRegion('')
     setSystem('')
+    setFacilityId('')
     setMinGrade('')
+    setExcludeNursingHomes(false)
+    setDistanceMode('none')
+    setCustomZip('')
+    setMaxDistance('')
     setSearch('')
-    setPage(0)
+    setCurrentPage(1)
   }
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['facilities', search, region, system, minGrade, page],
-    queryFn: () => api.get('/api/facilities', {
-      params: {
-        search: search || undefined,
-        region: region || undefined,
-        system: system || undefined,
-        min_grade: minGrade || undefined,
-        limit,
-        offset: page * limit
+  // Infinite query for facilities
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading
+  } = useInfiniteQuery({
+    queryKey: ['facilities-infinite', search, region, system, facilityId, minGrade, distanceMode, customZip, maxDistance, locationZip],
+    queryFn: async ({ pageParam = 0 }) => {
+      // If a specific facility is selected, just fetch that one
+      if (facilityId) {
+        const res = await api.get(`/api/facilities/${facilityId}`)
+        return {
+          data: [res.data.data],
+          total: 1,
+          offset: 0
+        }
       }
-    }).then(res => res.data)
+      const res = await api.get('/api/facilities', {
+        params: {
+          search: search || undefined,
+          region: region || undefined,
+          system: system || undefined,
+          min_grade: minGrade || undefined,
+          zip: locationZip || undefined,
+          sort_by_distance: distanceMode !== 'none' && locationZip ? true : undefined,
+          max_distance_miles: maxDistance ? parseInt(maxDistance) : undefined,
+          limit,
+          offset: pageParam
+        }
+      })
+      return { ...res.data, offset: pageParam }
+    },
+    getNextPageParam: (lastPage) => {
+      if (!lastPage) return undefined
+      const nextOffset = (lastPage.offset || 0) + limit
+      return nextOffset < lastPage.total ? nextOffset : undefined
+    },
+    initialPageParam: 0
   })
 
-  const facilities = data?.data || []
-  const total = data?.total || 0
+  // Flatten all facilities from all pages and apply client-side filter
+  const rawFacilities = data?.pages?.flatMap(page => page.data) || []
+  const allFacilities = excludeNursingHomes
+    ? rawFacilities.filter((f: any) => f.facility_type !== 'nursing_home')
+    : rawFacilities
+  const total = excludeNursingHomes
+    ? allFacilities.length
+    : (data?.pages?.[0]?.total || 0)
+  const totalPages = Math.ceil(total / limit)
+
+  // Auto-load more when scrolling to bottom
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage()
+        }
+      },
+      { threshold: 0.1 }
+    )
+
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current)
+    }
+
+    return () => observer.disconnect()
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+
+  // Track current page based on scroll position
+  useEffect(() => {
+    const handleScroll = () => {
+      const container = facilitiesContainerRef.current
+      if (!container) return
+
+      let newPage = 1
+      pageRefs.current.forEach((element, pageNum) => {
+        const rect = element.getBoundingClientRect()
+        if (rect.top <= 200) {
+          newPage = pageNum
+        }
+      })
+
+      if (newPage !== currentPage) {
+        setCurrentPage(newPage)
+      }
+    }
+
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [currentPage])
+
+  // Scroll to specific page
+  const scrollToPage = (pageNum: number) => {
+    const element = pageRefs.current.get(pageNum)
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  // Scroll to top
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   return (
     <div className="space-y-6">
@@ -107,7 +231,7 @@ export default function Facilities() {
         <div>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">Facility Rankings</h1>
           <p className="text-slate-600">
-            {total} healthcare facilities rated with our 11-index OFS scoring system
+            {total} healthcare facilities rated with our 13-index OFS scoring system
           </p>
         </div>
         {/* Live Indicator */}
@@ -141,7 +265,7 @@ export default function Facilities() {
               </p>
             </div>
             <Link
-              to="/billing"
+              to="/billing#plans"
               className="px-6 py-2.5 bg-white text-primary-600 rounded-lg font-semibold hover:bg-primary-50 transition-colors flex items-center gap-2"
             >
               <Crown className="w-4 h-4" />
@@ -191,7 +315,7 @@ export default function Facilities() {
                 type="text"
                 placeholder="Search facilities or health systems..."
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(0) }}
+                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }}
                 className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
             </div>
@@ -211,6 +335,16 @@ export default function Facilities() {
                 </span>
               )}
             </button>
+            {/* Exclude nursing homes toggle */}
+            <label className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors select-none">
+              <input
+                type="checkbox"
+                checked={excludeNursingHomes}
+                onChange={(e) => { setExcludeNursingHomes(e.target.checked); setCurrentPage(1) }}
+                className="w-4 h-4 text-primary-600 border-slate-300 rounded focus:ring-primary-500"
+              />
+              <span className="text-sm text-slate-700">Exclude nursing homes</span>
+            </label>
           </div>
 
           {/* Expanded Filters */}
@@ -221,7 +355,7 @@ export default function Facilities() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Region</label>
                   <select
                     value={region}
-                    onChange={(e) => { setRegion(e.target.value); setPage(0) }}
+                    onChange={(e) => { setRegion(e.target.value); setCurrentPage(1) }}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
                   >
                     <option value="">All Regions</option>
@@ -235,7 +369,7 @@ export default function Facilities() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Health System</label>
                   <select
                     value={system}
-                    onChange={(e) => { setSystem(e.target.value); setPage(0) }}
+                    onChange={(e) => { setSystem(e.target.value); setCurrentPage(1) }}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
                   >
                     <option value="">All Systems</option>
@@ -246,19 +380,93 @@ export default function Facilities() {
                 </div>
 
                 <div className="flex-1 min-w-[180px]">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Minimum Grade</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Facility</label>
                   <select
-                    value={minGrade}
-                    onChange={(e) => { setMinGrade(e.target.value); setPage(0) }}
+                    value={facilityId}
+                    onChange={(e) => { setFacilityId(e.target.value); setCurrentPage(1) }}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
                   >
-                    <option value="">Any Grade</option>
-                    <option value="A">A or better (90+)</option>
-                    <option value="B">B or better (80+)</option>
-                    <option value="C">C or better (70+)</option>
-                    <option value="D">D or better (60+)</option>
+                    <option value="">All Facilities</option>
+                    {facilityNames?.map((f: { id: string; name: string; city: string }) => (
+                      <option key={f.id} value={f.id}>{toTitleCase(f.name)} - {f.city}</option>
+                    ))}
                   </select>
                 </div>
+
+                <div className="flex-1 min-w-[180px]">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">OFS Grade</label>
+                  {canSeeAllScores ? (
+                    <select
+                      value={minGrade}
+                      onChange={(e) => { setMinGrade(e.target.value); setCurrentPage(1) }}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                    >
+                      <option value="">All Grades</option>
+                      <option value="A">A (90-100)</option>
+                      <option value="B">B (80-89)</option>
+                      <option value="C">C (70-79)</option>
+                      <option value="D">D (60-69)</option>
+                      <option value="F">F (&lt;60)</option>
+                    </select>
+                  ) : (
+                    <Link
+                      to="/billing#plans"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-400 flex items-center gap-2 hover:bg-slate-100 transition-colors"
+                    >
+                      <Lock className="w-3 h-3" />
+                      <span>Upgrade to filter by grade</span>
+                    </Link>
+                  )}
+                </div>
+
+                {/* Location/Distance Filter */}
+                <div className="flex-1 min-w-[180px]">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Distance From</label>
+                  <select
+                    value={distanceMode}
+                    onChange={(e) => { setDistanceMode(e.target.value as 'none' | 'profile' | 'custom'); setCurrentPage(1) }}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                  >
+                    <option value="none">No Distance Filter</option>
+                    {auth.isAuthenticated && userPrefs?.location_zip && (
+                      <option value="profile">My Location ({userPrefs.location_zip})</option>
+                    )}
+                    <option value="custom">Enter ZIP Code</option>
+                  </select>
+                </div>
+
+                {/* Custom ZIP Input */}
+                {distanceMode === 'custom' && (
+                  <div className="flex-1 min-w-[120px]">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">ZIP Code</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 23220"
+                      value={customZip}
+                      onChange={(e) => { setCustomZip(e.target.value.replace(/\D/g, '').slice(0, 5)); setCurrentPage(1) }}
+                      maxLength={5}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                    />
+                  </div>
+                )}
+
+                {/* Max Distance - only when distance filtering is active */}
+                {distanceMode !== 'none' && (
+                  <div className="flex-1 min-w-[140px]">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Max Distance</label>
+                    <select
+                      value={maxDistance}
+                      onChange={(e) => { setMaxDistance(e.target.value); setCurrentPage(1) }}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                    >
+                      <option value="">Any Distance</option>
+                      <option value="10">Within 10 miles</option>
+                      <option value="25">Within 25 miles</option>
+                      <option value="50">Within 50 miles</option>
+                      <option value="100">Within 100 miles</option>
+                    </select>
+                  </div>
+                )}
               </div>
 
               {activeFilters > 0 && (
@@ -267,7 +475,7 @@ export default function Facilities() {
                     {region && (
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 rounded-full text-sm">
                         {region}
-                        <button onClick={() => { setRegion(''); setPage(0) }}>
+                        <button onClick={() => { setRegion(''); setCurrentPage(1) }}>
                           <X className="w-3 h-3 text-slate-500 hover:text-slate-700" />
                         </button>
                       </span>
@@ -275,15 +483,23 @@ export default function Facilities() {
                     {system && (
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 rounded-full text-sm">
                         {toTitleCase(system)}
-                        <button onClick={() => { setSystem(''); setPage(0) }}>
+                        <button onClick={() => { setSystem(''); setCurrentPage(1) }}>
+                          <X className="w-3 h-3 text-slate-500 hover:text-slate-700" />
+                        </button>
+                      </span>
+                    )}
+                    {facilityId && (
+                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 rounded-full text-sm">
+                        {facilityNames?.find((f: { id: string }) => f.id === facilityId)?.name || 'Facility'}
+                        <button onClick={() => { setFacilityId(''); setCurrentPage(1) }}>
                           <X className="w-3 h-3 text-slate-500 hover:text-slate-700" />
                         </button>
                       </span>
                     )}
                     {minGrade && (
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 rounded-full text-sm">
-                        Grade {minGrade}+
-                        <button onClick={() => { setMinGrade(''); setPage(0) }}>
+                        Grade {minGrade}
+                        <button onClick={() => { setMinGrade(''); setCurrentPage(1) }}>
                           <X className="w-3 h-3 text-slate-500 hover:text-slate-700" />
                         </button>
                       </span>
@@ -328,74 +544,64 @@ export default function Facilities() {
         <div className="flex items-center justify-center py-20">
           <div className="animate-spin rounded-full h-10 w-10 border-4 border-primary-500 border-t-transparent"></div>
         </div>
-      ) : facilities.length === 0 ? (
+      ) : allFacilities.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
           <Building2 className="w-12 h-12 text-slate-300 mx-auto mb-4" />
           <p className="text-slate-500">No facilities found matching your criteria.</p>
         </div>
       ) : (
-        <div className="space-y-4 relative">
-          {facilities.map((facility: any, index: number) => {
-            const isBlurred = (!auth.isAuthenticated && !isAdminUnlocked()) && index >= FREE_VISIBLE_COUNT
-            // Show score if: paid user, OR first 3 in current list
+        <div className="space-y-4 relative" ref={facilitiesContainerRef}>
+          {allFacilities.map((facility: any, index: number) => {
+            // Calculate which page this facility belongs to
+            const pageNum = Math.floor(index / limit) + 1
+            const isFirstOfPage = index % limit === 0
+
+            // Show score if: paid user, OR first 3 overall
             const canSeeScore = canSeeAllScores || index < FREE_VISIBLE_COUNT
+            // Can access full facility detail if: paid user OR first 3
+            const canAccessFacility = canSeeAllScores || index < FREE_VISIBLE_COUNT
 
             return (
-              <div key={facility.id} className="relative">
+              <div
+                key={facility.id}
+                className="relative"
+                ref={isFirstOfPage ? (el) => { if (el) pageRefs.current.set(pageNum, el) } : undefined}
+              >
                 <Link
-                  to={isBlurred ? '#' : `/facilities/${facility.id}`}
-                  onClick={(e) => isBlurred && e.preventDefault()}
-                  className={`block bg-white rounded-xl border border-slate-200 p-6 transition-all ${
-                    isBlurred
-                      ? 'blur-sm pointer-events-none select-none'
-                      : 'hover:border-primary-300 hover:shadow-md'
-                  }`}
+                  to={canAccessFacility ? `/facilities/${facility.id}` : '/billing'}
+                  className={`block bg-white rounded-xl border border-slate-200 p-6 transition-all ${canAccessFacility ? 'hover:border-primary-300 hover:shadow-md' : 'hover:border-amber-300'}`}
                 >
                   <div className="flex items-start gap-6">
                     {/* Facility Score */}
                     <div className="flex-shrink-0">
-                      {facility.score ? (
-                        canSeeScore ? (
+                      {canSeeScore ? (
+                        facility.score ? (
                           <div className="flex flex-col items-center">
                             <span className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Facility Score</span>
-                            <div className={`w-16 h-16 rounded-xl flex flex-col items-center justify-center text-white ${getGradeColor(facility.score.ofs_grade)}`} title="OFS: 11 scoring indices">
-                              <span className="text-2xl font-bold">{facility.score.ofs_grade}</span>
-                              <span className="text-xs opacity-80">{Math.round(facility.score.ofs_score)}</span>
+                            <div className={`w-14 h-14 rounded-xl flex flex-col items-center justify-center text-white ${getGradeColor(facility.score.ofs_grade)}`} title="OFS: 11 scoring indices">
+                              <span className="text-xl font-bold">{facility.score.ofs_grade}</span>
+                              <span className="text-[10px] opacity-80">{Math.round(facility.score.ofs_score)}</span>
                             </div>
                           </div>
                         ) : (
-                          <div className="flex flex-col items-center group/score relative">
+                          <div className="flex flex-col items-center">
                             <span className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Facility Score</span>
-                            <div className="w-16 h-16 rounded-xl bg-white/60 backdrop-blur-[2px] border border-slate-200 flex flex-col items-center justify-center relative cursor-pointer hover:bg-slate-100 transition-colors">
-                              <span className="text-xl font-bold text-slate-400 blur-[4px] select-none">B+</span>
-                              <span className="text-xs text-slate-300 blur-[3px] select-none">82</span>
-                              <Lock className="absolute w-4 h-4 text-slate-400" />
-                            </div>
-                            <span className="text-[8px] text-slate-400 mt-1">Sample</span>
-                            {/* Tooltip */}
-                            <div className="absolute -bottom-14 left-1/2 -translate-x-1/2 opacity-0 group-hover/score:opacity-100 transition-opacity pointer-events-none z-20">
-                              <Link
-                                to="/billing"
-                                className="pointer-events-auto whitespace-nowrap px-3 py-2 bg-slate-800 text-white text-xs rounded-lg shadow-lg flex items-center gap-1.5"
-                              >
-                                <Crown className="w-3 h-3 text-amber-400" />
-                                Upgrade to unlock
-                              </Link>
-                              <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 rotate-45" />
+                            <div className="w-14 h-14 rounded-xl bg-slate-100 flex items-center justify-center">
+                              <span className="text-slate-400 text-xs">N/A</span>
                             </div>
                           </div>
                         )
                       ) : (
                         <div className="flex flex-col items-center">
                           <span className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Facility Score</span>
-                          <div className="w-16 h-16 rounded-xl bg-slate-100 flex items-center justify-center">
-                            <span className="text-slate-400 text-sm">N/A</span>
+                          <div className="w-14 h-14 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center">
+                            <Lock className="w-5 h-5 text-amber-500" />
                           </div>
                         </div>
                       )}
                     </div>
 
-                    {/* Info */}
+                    {/* Info - Always visible */}
                     <div className="flex-1 min-w-0">
                       <h3 className="text-lg font-semibold text-slate-900 mb-1 truncate">
                         {toTitleCase(facility.name)}
@@ -428,61 +634,37 @@ export default function Facilities() {
                         )}
                       </div>
 
-                      {/* Score breakdown - show top indices with descriptive names */}
-                      {facility.score?.indices && (
+                      {/* Score breakdown - only for paid users */}
+                      {facility.score?.indices && canSeeScore && (
                         <div className="mt-3 flex flex-wrap gap-2">
-                          {canSeeScore ? (
-                            <>
-                              {Object.entries(facility.score.indices)
-                                .filter(([, idx]: [string, any]) => idx.score !== null)
-                                .sort(([, a]: [string, any], [, b]: [string, any]) => b.weight_pct - a.weight_pct)
-                                .slice(0, 6) // Show top 6 indices
-                                .map(([key, idx]: [string, any]) => {
-                                  const info = INDEX_INFO[key]
-                                  return (
-                                    <span
-                                      key={key}
-                                      title={info?.desc || idx.name}
-                                      className={`px-2 py-1 rounded text-xs font-medium cursor-help ${
-                                        idx.score >= 80 ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
-                                        idx.score >= 60 ? 'bg-amber-100 text-amber-700 border border-amber-200' :
-                                        'bg-red-100 text-red-700 border border-red-200'
-                                      }`}
-                                    >
-                                      {info?.name || key.toUpperCase()}: {idx.score}
-                                    </span>
-                                  )
-                                })
-                              }
-                              {Object.entries(facility.score.indices).filter(([, idx]: [string, any]) => idx.score !== null).length > 6 && (
-                                <span className="px-2 py-1 rounded text-xs text-slate-500 bg-slate-100">
-                                  +{Object.entries(facility.score.indices).filter(([, idx]: [string, any]) => idx.score !== null).length - 6} more
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              {/* Blurred sample indices for free users */}
-                              {[
-                                { name: 'Pay', score: 72 },
-                                { name: 'Reviews', score: 68 },
-                                { name: 'Safety', score: 85 },
-                                { name: 'Patient', score: 77 },
-                                { name: 'Facility', score: 64 }
-                              ].map((item) => (
+                          {Object.entries(facility.score.indices)
+                            .filter(([, idx]: [string, any]) => idx.score !== null)
+                            .sort(([, a]: [string, any], [, b]: [string, any]) => b.weight_pct - a.weight_pct)
+                            .slice(0, 5) // Show top 5 indices (compact)
+                            .map(([key, idx]: [string, any]) => {
+                              const info = INDEX_INFO[key]
+                              return (
                                 <span
-                                  key={item.name}
-                                  className="px-2 py-1 rounded text-xs font-medium bg-white/60 backdrop-blur-[2px] border border-slate-200 text-slate-400 blur-[3px] select-none"
+                                  key={key}
+                                  title={info?.desc || idx.name}
+                                  className={`px-2 py-0.5 rounded text-xs font-medium cursor-help ${
+                                    idx.score >= 80 ? 'bg-emerald-100 text-emerald-700' :
+                                    idx.score >= 60 ? 'bg-amber-100 text-amber-700' :
+                                    'bg-red-100 text-red-700'
+                                  }`}
                                 >
-                                  {item.name}: {item.score}
+                                  {info?.name || key.toUpperCase()}: {idx.score}
                                 </span>
-                              ))}
-                              <span className="px-2 py-1 rounded text-xs text-slate-400 bg-slate-50 border border-slate-200 flex items-center gap-1">
-                                <Lock className="w-3 h-3" />
-                                Sample Data
-                              </span>
-                            </>
-                          )}
+                              )
+                            })
+                          }
+                        </div>
+                      )}
+                      {/* Upgrade prompt for free users */}
+                      {!canSeeScore && (
+                        <div className="mt-3 flex items-center gap-2 text-amber-600 text-sm">
+                          <Lock className="w-4 h-4" />
+                          <span>Upgrade to see facility scores and details</span>
                         </div>
                       )}
                     </div>
@@ -492,54 +674,53 @@ export default function Facilities() {
             )
           })}
 
-          {/* Upgrade overlay for unauthenticated users */}
-          {(!auth.isAuthenticated && !isAdminUnlocked()) && facilities.length > FREE_VISIBLE_COUNT && (
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-50 via-slate-50/95 to-transparent pt-32 pb-8 -mt-24 rounded-b-xl">
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 rounded-full mb-4">
-                  <Lock className="w-8 h-8 text-primary-600" />
-                </div>
-                <h3 className="text-xl font-bold text-slate-900 mb-2">
-                  Sign up to see all {total} facilities
-                </h3>
-                <p className="text-slate-600 mb-6 max-w-md mx-auto">
-                  Create a free account to browse all facility rankings, compare scores, and find your perfect workplace.
-                </p>
-                <button
-                  onClick={() => auth.signinRedirect()}
-                  className="inline-flex items-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-primary-700 transition-colors"
-                >
-                  Sign Up Free
-                  <ArrowRight className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Load more trigger */}
+          <div ref={loadMoreRef} className="h-10 flex items-center justify-center">
+            {isFetchingNextPage && (
+              <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary-500 border-t-transparent"></div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Pagination */}
-      {total > limit && (
-        <div className="flex items-center justify-center gap-4">
-          <button
-            onClick={() => setPage(p => Math.max(0, p - 1))}
-            disabled={page === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg disabled:opacity-50"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Previous
-          </button>
-          <span className="text-sm text-slate-600">
-            Page {page + 1} of {Math.ceil(total / limit)}
-          </span>
-          <button
-            onClick={() => setPage(p => p + 1)}
-            disabled={(page + 1) * limit >= total}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg disabled:opacity-50"
-          >
-            Next
-            <ChevronRight className="w-4 h-4" />
-          </button>
+      {/* Floating Page Indicator */}
+      {totalPages > 1 && allFacilities.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <div className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-full shadow-lg">
+            <button
+              onClick={() => scrollToPage(Math.max(1, currentPage - 1))}
+              disabled={currentPage <= 1}
+              className="p-1 hover:bg-slate-700 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-medium min-w-[80px] text-center">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => {
+                if (currentPage < totalPages) {
+                  // Fetch next page if needed
+                  if (hasNextPage && currentPage * limit >= allFacilities.length) {
+                    fetchNextPage()
+                  }
+                  scrollToPage(currentPage + 1)
+                }
+              }}
+              disabled={currentPage >= totalPages}
+              className="p-1 hover:bg-slate-700 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <div className="w-px h-4 bg-slate-600 mx-1" />
+            <button
+              onClick={scrollToTop}
+              className="p-1 hover:bg-slate-700 rounded flex items-center gap-1 text-xs"
+            >
+              <ChevronUp className="w-4 h-4" />
+              Top
+            </button>
+          </div>
         </div>
       )}
     </div>

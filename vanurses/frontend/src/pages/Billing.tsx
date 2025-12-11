@@ -277,7 +277,7 @@ export default function Billing() {
       )}
 
       {/* Pricing Table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+      <div id="plans" className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold text-slate-900">Choose Your Plan</h2>
           <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1">

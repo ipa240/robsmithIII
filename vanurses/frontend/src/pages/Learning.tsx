@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import {
   GraduationCap, BookOpen, Plus, X,
-  ChevronRight, Star,
+  ChevronRight, Star, Pencil, Trash2,
   CheckCircle, AlertCircle, ExternalLink
 } from 'lucide-react'
 import { useSubscription, isAdminUnlocked } from '../hooks/useSubscription'
@@ -36,14 +36,7 @@ const CEU_CATEGORIES = [
   'Leadership', 'Infection Control', 'Pain Management', 'Other'
 ]
 
-const RESOURCES: Resource[] = [
-  { id: '1', title: 'How to Negotiate Your Nursing Salary', description: 'Step-by-step guide to getting paid what you deserve', category: 'Career', url: '#', type: 'guide', reads: 2341 },
-  { id: '2', title: 'NCLEX Study Tips from Top Performers', description: 'Proven strategies from nurses who aced the exam', category: 'Education', url: '#', type: 'article', reads: 5672 },
-  { id: '3', title: 'Virginia Compact Nursing License FAQ', description: 'Everything you need to know about the NLC in Virginia', category: 'Licensing', url: '#', type: 'guide', reads: 3890 },
-  { id: '4', title: 'ICU Interview Questions & Answers', description: 'Common questions and how to answer them confidently', category: 'Career', url: '#', type: 'article', reads: 4123 },
-  { id: '5', title: 'Understanding Your Benefits Package', description: 'How to evaluate health insurance, PTO, and retirement plans', category: 'Career', url: '#', type: 'guide', reads: 1987 },
-  { id: '6', title: 'Free CEU Courses for Virginia RNs', description: 'Curated list of free continuing education resources', category: 'Education', url: '#', type: 'tool', reads: 8934 },
-]
+// Resources are now fetched from API
 
 export default function Learning() {
   const auth = useAuth()
@@ -53,6 +46,7 @@ export default function Learning() {
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'ceu' | 'resources'>('ceu')
   const [showAddCEU, setShowAddCEU] = useState(false)
+  const [editingCEU, setEditingCEU] = useState<CEULog | null>(null)
   const [newCEU, setNewCEU] = useState({
     title: '',
     provider: '',
@@ -60,6 +54,7 @@ export default function Learning() {
     category: '',
     completion_date: ''
   })
+  const [resourceCategory, setResourceCategory] = useState('All')
 
   // Sample CEU data for demo (declared outside the conditional to avoid duplicate)
   const sampleCEUs = [
@@ -211,6 +206,30 @@ export default function Learning() {
     }
   })
 
+  const updateCEU = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<CEULog> }) =>
+      api.patch(`/api/learning/ceus/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ceu-logs'] })
+      setEditingCEU(null)
+    }
+  })
+
+  const deleteCEU = useMutation({
+    mutationFn: (id: string) => api.delete(`/api/learning/ceus/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ceu-logs'] })
+    }
+  })
+
+  // Fetch resources from API
+  const { data: resources = [] } = useQuery<Resource[]>({
+    queryKey: ['learning-resources', resourceCategory],
+    queryFn: () => api.get('/api/learning/resources', {
+      params: resourceCategory !== 'All' ? { category: resourceCategory } : {}
+    }).then(res => res.data)
+  })
+
   const totalHours = ceuLogs.reduce((sum, log) => sum + log.hours, 0)
   const requiredHours = 30 // Virginia RN requirement
   const hoursRemaining = Math.max(0, requiredHours - totalHours)
@@ -323,6 +342,7 @@ export default function Learning() {
                     <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Category</th>
                     <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Hours</th>
                     <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase">Date</th>
+                    <th className="text-right px-6 py-3 text-xs font-medium text-slate-500 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -340,6 +360,28 @@ export default function Learning() {
                       <td className="px-6 py-4 text-slate-600">{log.hours}h</td>
                       <td className="px-6 py-4 text-slate-600">
                         {new Date(log.completion_date).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => setEditingCEU(log)}
+                            className="p-1.5 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                            title="Edit"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm('Are you sure you want to delete this CEU?')) {
+                                deleteCEU.mutate(log.id)
+                              }
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -408,10 +450,15 @@ export default function Learning() {
         <div className="space-y-6">
           {/* Categories */}
           <div className="flex gap-2 flex-wrap">
-            {['All', 'Career', 'Education', 'Licensing'].map(cat => (
+            {['All', 'Career', 'Education', 'Licensing', 'Clinical'].map(cat => (
               <button
                 key={cat}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-white border border-slate-200 hover:border-primary-500 hover:text-primary-600"
+                onClick={() => setResourceCategory(cat)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  resourceCategory === cat
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-white border border-slate-200 hover:border-primary-500 hover:text-primary-600'
+                }`}
               >
                 {cat}
               </button>
@@ -420,33 +467,36 @@ export default function Learning() {
 
           {/* Resource Grid */}
           <div className="grid md:grid-cols-2 gap-4">
-            {RESOURCES.map(resource => (
-              <a
-                key={resource.id}
-                href={resource.url}
-                className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-shadow block"
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                    resource.type === 'guide' ? 'bg-blue-100 text-blue-700' :
-                    resource.type === 'article' ? 'bg-green-100 text-green-700' :
-                    resource.type === 'video' ? 'bg-purple-100 text-purple-700' :
-                    'bg-amber-100 text-amber-700'
-                  }`}>
-                    {resource.type}
-                  </span>
-                  <span className="text-xs text-slate-400 flex items-center gap-1">
-                    <Star className="w-3 h-3" />
-                    {resource.reads.toLocaleString()} reads
-                  </span>
-                </div>
-                <h3 className="font-semibold text-slate-900 mb-1">{resource.title}</h3>
-                <p className="text-sm text-slate-600">{resource.description}</p>
-                <div className="mt-3 flex items-center gap-1 text-primary-600 text-sm">
-                  Read more <ChevronRight className="w-4 h-4" />
-                </div>
-              </a>
-            ))}
+            {resources.length === 0 ? (
+              <div className="col-span-2 text-center py-12 bg-white rounded-xl border border-slate-200">
+                <BookOpen className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                <p className="text-slate-500">No resources available in this category</p>
+              </div>
+            ) : (
+              resources.map((resource: any) => (
+                <a
+                  key={resource.id}
+                  href={resource.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-shadow block"
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                      resource.is_free ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      {resource.is_free ? 'Free' : 'Paid'}
+                    </span>
+                    <span className="text-xs text-slate-400">{resource.provider}</span>
+                  </div>
+                  <h3 className="font-semibold text-slate-900 mb-1">{resource.title}</h3>
+                  <p className="text-sm text-slate-600 line-clamp-2">{resource.description}</p>
+                  <div className="mt-3 flex items-center gap-1 text-primary-600 text-sm">
+                    View Resource <ExternalLink className="w-3 h-3" />
+                  </div>
+                </a>
+              ))
+            )}
           </div>
         </div>
       )}
@@ -535,6 +585,104 @@ export default function Learning() {
                   className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
                 >
                   Save
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit CEU Modal */}
+      {editingCEU && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/30" onClick={() => setEditingCEU(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-slate-900">Edit CEU</h2>
+              <button onClick={() => setEditingCEU(null)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Course Title</label>
+                <input
+                  type="text"
+                  value={editingCEU.title}
+                  onChange={e => setEditingCEU({ ...editingCEU, title: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Provider</label>
+                <input
+                  type="text"
+                  value={editingCEU.provider}
+                  onChange={e => setEditingCEU({ ...editingCEU, provider: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Hours</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={editingCEU.hours}
+                    onChange={e => setEditingCEU({ ...editingCEU, hours: parseFloat(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Completion Date</label>
+                  <input
+                    type="date"
+                    value={editingCEU.completion_date?.split('T')[0] || ''}
+                    onChange={e => setEditingCEU({ ...editingCEU, completion_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+                <select
+                  value={editingCEU.category}
+                  onChange={e => setEditingCEU({ ...editingCEU, category: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                >
+                  <option value="">Select category</option>
+                  {CEU_CATEGORIES.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setEditingCEU(null)}
+                  className="flex-1 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => updateCEU.mutate({
+                    id: editingCEU.id,
+                    data: {
+                      title: editingCEU.title,
+                      provider: editingCEU.provider,
+                      hours: editingCEU.hours,
+                      category: editingCEU.category,
+                      completion_date: editingCEU.completion_date
+                    }
+                  })}
+                  disabled={!editingCEU.title || !editingCEU.hours || !editingCEU.category}
+                  className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                >
+                  Save Changes
                 </button>
               </div>
             </div>

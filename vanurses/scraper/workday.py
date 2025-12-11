@@ -150,6 +150,10 @@ class WorkdayScraper:
                 if parts:
                     city = parts[0].strip()
 
+            # Fall back to default city from config if no location in API response
+            if not city and self.config.get('default_city'):
+                city = self.config['default_city']
+
             # Extract posted date
             posted_on = job_data.get('postedOn', '')
             posted_at = None

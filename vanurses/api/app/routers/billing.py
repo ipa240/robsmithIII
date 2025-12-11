@@ -280,9 +280,16 @@ async def get_subscription_status(
     db: Session = Depends(get_db)
 ):
     """Get current user's subscription status"""
+    # Debug logging
+    if current_user:
+        print(f"[BILLING] Auth user: email={current_user.email}, zitadel_id={current_user.zitadel_id}")
+    else:
+        print("[BILLING] No current_user - request has no valid auth token")
+
     user = await get_user_from_zitadel(current_user, db)
 
     if not user:
+        print(f"[BILLING] No database user found for current_user: {current_user.email if current_user else 'None'}")
         # Return free tier for unauthenticated users
         return SubscriptionStatus(
             tier="free",
@@ -310,6 +317,9 @@ async def get_subscription_status(
     trial_ends = user_dict.get("trial_ends_at")
     period_ends = user_dict.get("current_period_ends_at")
     ai_credits = user_dict.get("ai_credits", 0) or 0
+
+    # Debug logging
+    print(f"[BILLING] Found user: id={user_id}, email={user_dict.get('email')}, tier={tier}")
 
     # Check if in trial
     is_trial = False

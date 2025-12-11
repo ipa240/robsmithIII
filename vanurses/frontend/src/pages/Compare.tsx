@@ -88,7 +88,7 @@ export default function Compare() {
               <ArrowLeft className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-slate-900">Compare Facilities</h1>
+              <h1 className="text-3xl text-slate-900">Compare Facilities</h1>
               <p className="text-slate-600">Side-by-side comparison of up to 5 facilities</p>
             </div>
           </div>
@@ -215,7 +215,7 @@ export default function Compare() {
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Compare Facilities</h1>
+          <h1 className="text-3xl text-slate-900">Compare Facilities</h1>
           <p className="text-slate-600">Side-by-side comparison of up to 5 facilities</p>
         </div>
       </div>

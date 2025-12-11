@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { X, MapPin, Clock, DollarSign, Building2, ExternalLink, GraduationCap, Briefcase, Award, Calendar, Gift, Heart, ChevronRight, Loader2 } from 'lucide-react'
+import { useAuth } from 'react-oidc-context'
+import { X, MapPin, Clock, DollarSign, Building2, ExternalLink, GraduationCap, Briefcase, Award, Calendar, Gift, Heart, ChevronRight, Loader2, Lock, Crown } from 'lucide-react'
 import { api } from '../api/client'
 import { toTitleCase } from '../utils/format'
+import { useSubscription, isAdminUnlocked } from '../hooks/useSubscription'
 import JobSection from './JobSection'
 
 interface Job {
@@ -44,6 +46,72 @@ const formatEmploymentType = (type: string): string => {
   return formatMap[type] || type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 }
 
+// Format nursing types for display: cna -> "CNA", rn -> "RN"
+const formatNursingType = (type: string): string => {
+  const formatMap: Record<string, string> = {
+    'cna': 'CNA',
+    'cnm': 'CNM',
+    'crna': 'CRNA',
+    'lpn': 'LPN',
+    'np': 'NP',
+    'rn': 'RN',
+  }
+  return formatMap[type?.toLowerCase()] || type?.toUpperCase() || type
+}
+
+// Format specialties for display: case_management -> "Case Management"
+const formatSpecialty = (specialty: string): string => {
+  const formatMap: Record<string, string> = {
+    'cardiac': 'Cardiac',
+    'case_management': 'Case Management',
+    'cath_lab': 'Cath Lab',
+    'cvor': 'CVOR',
+    'dialysis': 'Dialysis',
+    'education': 'Education',
+    'endo': 'Endoscopy',
+    'er': 'Emergency',
+    'float': 'Float Pool',
+    'general': 'General',
+    'home_health': 'Home Health',
+    'hospice': 'Hospice',
+    'icu': 'ICU',
+    'infection_control': 'Infection Control',
+    'labor_delivery': 'Labor & Delivery',
+    'ltc': 'Long Term Care',
+    'med_surg': 'Med/Surg',
+    'neuro': 'Neuro',
+    'nicu': 'NICU',
+    'oncology': 'Oncology',
+    'or': 'OR',
+    'ortho': 'Orthopedics',
+    'outpatient': 'Outpatient',
+    'pacu': 'PACU',
+    'peds': 'Pediatrics',
+    'pre_op': 'Pre-Op',
+    'psych': 'Psych',
+    'quality': 'Quality',
+    'rehab': 'Rehab',
+    'skilled_nursing': 'Skilled Nursing',
+    'tele': 'Telemetry',
+    'travel': 'Travel',
+    'wound': 'Wound Care',
+  }
+  return formatMap[specialty?.toLowerCase()] || specialty?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || specialty
+}
+
+// Format experience field - can be string or object {type, years}
+const formatExperience = (experience: any): string | null => {
+  if (!experience) return null
+  if (typeof experience === 'string') return experience
+  if (typeof experience === 'object') {
+    const { type, years } = experience
+    if (type && years) return `${years} year${years !== 1 ? 's' : ''} ${type}`
+    if (type) return type
+    if (years) return `${years} year${years !== 1 ? 's' : ''} experience`
+  }
+  return null
+}
+
 // Grade color helper
 const getGradeColor = (grade: string) => {
   const colors: Record<string, string> = {
@@ -57,6 +125,11 @@ const getGradeColor = (grade: string) => {
 }
 
 export default function JobPreviewDrawer({ job, isOpen, onClose }: JobPreviewDrawerProps) {
+  const auth = useAuth()
+  const { isPaid } = useSubscription()
+  // Paid users OR admin unlocked can see grades (no top 3 exception on job pages)
+  const canSeeGrades = (auth.isAuthenticated && isPaid) || isAdminUnlocked()
+
   // Fetch enriched job details when drawer is open
   const { data: details, isLoading: detailsLoading } = useQuery({
     queryKey: ['job-details', job?.id],
@@ -87,10 +160,26 @@ export default function JobPreviewDrawer({ job, isOpen, onClose }: JobPreviewDra
                 {toTitleCase(job.title)}
               </h2>
               {job.facility_name && (
-                <div className="flex items-center gap-2 text-primary-600 text-sm mt-1">
+                <Link
+                  to={`/facilities/${job.facility_id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-2 text-primary-600 hover:text-primary-700 hover:underline text-sm mt-1"
+                >
                   <Building2 className="w-4 h-4 flex-shrink-0" />
                   <span className="truncate">{toTitleCase(job.facility_name)}</span>
-                </div>
+                  {job.facility_ofs_grade && (
+                    canSeeGrades ? (
+                      <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${getGradeColor(job.facility_ofs_grade[0]).replace(' border-', ' ')}`}>
+                        {job.facility_ofs_grade}
+                      </span>
+                    ) : (
+                      <span className="relative px-1.5 py-0.5 text-[10px] font-bold rounded bg-slate-100">
+                        <span className="blur-sm select-none text-slate-400">A+</span>
+                        <Lock className="absolute inset-0 m-auto w-2.5 h-2.5 text-slate-400" />
+                      </span>
+                    )
+                  )}
+                </Link>
               )}
             </div>
             <button
@@ -107,18 +196,29 @@ export default function JobPreviewDrawer({ job, isOpen, onClose }: JobPreviewDra
           {/* Quick Info Row */}
           <div className="flex flex-wrap gap-2">
             {job.facility_ofs_grade && (
-              <span className={`px-2.5 py-1 text-xs font-bold rounded-full border ${getGradeColor(job.facility_ofs_grade[0])}`}>
-                {job.facility_ofs_grade} Facility
-              </span>
+              canSeeGrades ? (
+                <span className={`px-2.5 py-1 text-xs font-bold rounded-full border ${getGradeColor(job.facility_ofs_grade[0])}`}>
+                  {job.facility_ofs_grade} Facility
+                </span>
+              ) : (
+                <Link
+                  to="/billing"
+                  className="relative px-2.5 py-1 text-xs font-bold rounded-full border border-slate-200 bg-slate-100 flex items-center gap-1 hover:bg-slate-200 transition-colors"
+                >
+                  <span className="blur-sm select-none text-slate-400">A+</span>
+                  <Lock className="w-3 h-3 text-slate-400" />
+                  <Crown className="w-3 h-3 text-amber-400" />
+                </Link>
+              )
             )}
             {job.nursing_type && (
               <span className="px-2.5 py-1 bg-primary-50 text-primary-700 text-xs font-medium rounded-full">
-                {job.nursing_type}
+                {formatNursingType(job.nursing_type)}
               </span>
             )}
             {job.specialty && (
               <span className="px-2.5 py-1 bg-slate-100 text-slate-700 text-xs font-medium rounded-full">
-                {job.specialty}
+                {formatSpecialty(job.specialty)}
               </span>
             )}
             {job.employment_type && (
@@ -206,7 +306,7 @@ export default function JobPreviewDrawer({ job, isOpen, onClose }: JobPreviewDra
               <JobSection
                 title="Experience"
                 icon={<Briefcase className="w-4 h-4" />}
-                content={parsed.experience}
+                content={formatExperience(parsed.experience)}
               />
 
               <JobSection

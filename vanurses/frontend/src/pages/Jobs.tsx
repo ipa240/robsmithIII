@@ -1,8 +1,8 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuth } from 'react-oidc-context'
-import { Search, MapPin, Clock, DollarSign, Building2, ChevronLeft, ChevronRight, SlidersHorizontal, X, Gift, Truck, Award, Calendar, Lock, Crown, RefreshCw, Sparkles, Heart, TrendingUp, Eye } from 'lucide-react'
+import { Search, MapPin, Clock, DollarSign, Building2, ChevronLeft, ChevronRight, ChevronUp, SlidersHorizontal, X, Gift, Truck, Award, Calendar, Lock, Crown, RefreshCw, Sparkles, Heart, TrendingUp, Eye, Baby, Loader2, GraduationCap } from 'lucide-react'
 import { api } from '../api/client'
 import { toTitleCase } from '../utils/format'
 import { useSubscription, isAdminUnlocked } from '../hooks/useSubscription'
@@ -20,6 +20,59 @@ const formatEmploymentType = (type: string): string => {
     'other': 'Other',
   }
   return formatMap[type] || type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
+// Format nursing types for display: cna -> "CNA", rn -> "RN"
+const formatNursingType = (type: string): string => {
+  const formatMap: Record<string, string> = {
+    'cna': 'CNA',
+    'cnm': 'CNM',
+    'crna': 'CRNA',
+    'lpn': 'LPN',
+    'np': 'NP',
+    'rn': 'RN',
+  }
+  return formatMap[type?.toLowerCase()] || type?.toUpperCase() || type
+}
+
+// Format specialties for display: case_management -> "Case Management"
+const formatSpecialty = (specialty: string): string => {
+  const formatMap: Record<string, string> = {
+    'cardiac': 'Cardiac',
+    'case_management': 'Case Management',
+    'cath_lab': 'Cath Lab',
+    'cvor': 'CVOR',
+    'dialysis': 'Dialysis',
+    'education': 'Education',
+    'endo': 'Endoscopy',
+    'er': 'Emergency',
+    'float': 'Float Pool',
+    'general': 'General',
+    'home_health': 'Home Health',
+    'hospice': 'Hospice',
+    'icu': 'ICU',
+    'infection_control': 'Infection Control',
+    'labor_delivery': 'Labor & Delivery',
+    'ltc': 'Long Term Care',
+    'med_surg': 'Med/Surg',
+    'neuro': 'Neuro',
+    'nicu': 'NICU',
+    'oncology': 'Oncology',
+    'or': 'OR',
+    'ortho': 'Orthopedics',
+    'outpatient': 'Outpatient',
+    'pacu': 'PACU',
+    'peds': 'Pediatrics',
+    'pre_op': 'Pre-Op',
+    'psych': 'Psych',
+    'quality': 'Quality',
+    'rehab': 'Rehab',
+    'skilled_nursing': 'Skilled Nursing',
+    'tele': 'Telemetry',
+    'travel': 'Travel',
+    'wound': 'Wound Care',
+  }
+  return formatMap[specialty?.toLowerCase()] || specialty?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || specialty
 }
 
 // Grade color helper
@@ -48,6 +101,8 @@ export default function Jobs() {
     shift_type: '',
     region: '',
     facility_system: '',
+    facility_id: '',
+    childcare: '',
     ofs_grade: '',
     posted_within_days: '',
     min_pay: '',
@@ -55,11 +110,61 @@ export default function Jobs() {
     has_sign_on_bonus: false,
     has_relocation: false,
     pay_disclosed_only: false,
+    // New enrichment-based filters
+    new_grad_friendly: false,
+    bsn_required: '',  // 'yes', 'no', or ''
+    certification: '',  // 'ACLS', 'BLS', 'PALS', etc.
   })
-  const [page, setPage] = useState(0)
+
+  // Distance/location state
+  const [distanceMode, setDistanceMode] = useState<'none' | 'profile' | 'custom'>('none')
+  const [customZip, setCustomZip] = useState('')
+  const [maxDistance, setMaxDistance] = useState<string>('')
+
   const [selectedJob, setSelectedJob] = useState<any>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+
+  // Handle browser back button for drawer - close drawer instead of navigating away
+  useEffect(() => {
+    const handlePopState = () => {
+      if (drawerOpen) {
+        setDrawerOpen(false)
+        setSelectedJob(null)
+      }
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [drawerOpen])
+
+  // Push history entry when drawer opens
+  useEffect(() => {
+    if (drawerOpen) {
+      window.history.pushState({ drawerOpen: true }, '')
+    }
+  }, [drawerOpen])
+
+  // Close drawer and clean up history
+  const closeDrawer = () => {
+    setDrawerOpen(false)
+    setSelectedJob(null)
+    // Go back to remove the history entry we added
+    if (window.history.state?.drawerOpen) {
+      window.history.back()
+    }
+  }
   const limit = 20
+  const loadMoreRef = useRef<HTMLDivElement>(null)
+  const jobsContainerRef = useRef<HTMLDivElement>(null)
+  const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+
+  // Fetch user preferences to get their location_zip
+  const { data: userPrefs } = useQuery({
+    queryKey: ['user-preferences'],
+    queryFn: () => api.get('/api/me/preferences').then(res => res.data.data),
+    enabled: auth.isAuthenticated
+  })
 
   const { data: filterOptions } = useQuery({
     queryKey: ['filters'],
@@ -69,6 +174,18 @@ export default function Jobs() {
   // Count active filters (excluding empty strings and false booleans)
   const activeFilters = Object.entries(filters).filter(([_, v]) => v && v !== '').length
 
+  // Get location zip code based on distance mode
+  const getLocationZip = (): string | null => {
+    if (distanceMode === 'profile' && userPrefs?.location_zip) {
+      return userPrefs.location_zip
+    } else if (distanceMode === 'custom' && customZip && customZip.length === 5) {
+      return customZip
+    }
+    return null
+  }
+
+  const locationZip = getLocationZip()
+
   const clearAllFilters = () => {
     setFilters({
       nursing_type: '',
@@ -77,6 +194,8 @@ export default function Jobs() {
       shift_type: '',
       region: '',
       facility_system: '',
+      facility_id: '',
+      childcare: '',
       ofs_grade: '',
       posted_within_days: '',
       min_pay: '',
@@ -84,14 +203,27 @@ export default function Jobs() {
       has_sign_on_bonus: false,
       has_relocation: false,
       pay_disclosed_only: false,
+      new_grad_friendly: false,
+      bsn_required: '',
+      certification: '',
     })
     setSearch('')
-    setPage(0)
+    setDistanceMode('none')
+    setCustomZip('')
+    setMaxDistance('')
+    setCurrentPage(1)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['jobs', search, filters, page],
-    queryFn: () => api.get('/api/jobs', {
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['jobs-infinite', search, filters, distanceMode, customZip, maxDistance, locationZip],
+    queryFn: ({ pageParam = 0 }) => api.get('/api/jobs', {
       params: {
         search: search || undefined,
         nursing_type: filters.nursing_type || undefined,
@@ -100,6 +232,8 @@ export default function Jobs() {
         shift_type: filters.shift_type || undefined,
         region: filters.region || undefined,
         facility_system: filters.facility_system || undefined,
+        facility_id: filters.facility_id || undefined,
+        childcare: filters.childcare || undefined,
         ofs_grade: filters.ofs_grade || undefined,
         posted_within_days: filters.posted_within_days ? parseInt(filters.posted_within_days) : undefined,
         min_pay: filters.min_pay ? parseInt(filters.min_pay) : undefined,
@@ -107,23 +241,86 @@ export default function Jobs() {
         has_sign_on_bonus: filters.has_sign_on_bonus || undefined,
         has_relocation: filters.has_relocation || undefined,
         pay_disclosed_only: filters.pay_disclosed_only || undefined,
+        // New enrichment-based filters
+        new_grad_friendly: filters.new_grad_friendly || undefined,
+        bsn_required: filters.bsn_required || undefined,
+        certification: filters.certification || undefined,
+        // Location-based sorting
+        user_zip: locationZip || undefined,
+        sort_by_distance: distanceMode !== 'none' && locationZip ? true : undefined,
+        max_distance_miles: maxDistance ? parseInt(maxDistance) : undefined,
         limit,
-        offset: page * limit
+        offset: pageParam * limit
       }
-    }).then(res => res.data)
+    }).then(res => res.data),
+    getNextPageParam: (lastPage, allPages) => {
+      const loadedCount = allPages.length * limit
+      return loadedCount < lastPage.total ? allPages.length : undefined
+    },
+    initialPageParam: 0,
   })
 
-  // Get top 3 facilities for free score visibility
-  const { data: topFacilities } = useQuery({
-    queryKey: ['top-facilities-for-free'],
-    queryFn: () => api.get('/api/facilities', { params: { limit: 3 } }).then(res => res.data.data)
-  })
+  // Flatten all pages into a single jobs array
+  const jobs = useMemo(() => {
+    return data?.pages.flatMap(page => page.data) || []
+  }, [data])
 
-  // Set of top 3 facility IDs - free users can see scores for these
-  const top3FacilityIds = new Set((topFacilities || []).map((f: any) => f.id))
+  const total = data?.pages[0]?.total || 0
+  const totalPages = Math.ceil(total / limit)
 
-  const jobs = data?.data || []
-  const total = data?.total || 0
+  // Infinite scroll: observe the load more trigger
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage()
+        }
+      },
+      { threshold: 0.1 }
+    )
+
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current)
+    }
+
+    return () => observer.disconnect()
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+
+  // Track current page based on scroll position
+  useEffect(() => {
+    const handleScroll = () => {
+      const viewportMiddle = window.scrollY + window.innerHeight / 2
+      let newCurrentPage = 1
+
+      pageRefs.current.forEach((element, pageNum) => {
+        if (element) {
+          const rect = element.getBoundingClientRect()
+          const elementTop = rect.top + window.scrollY
+          if (elementTop < viewportMiddle) {
+            newCurrentPage = pageNum
+          }
+        }
+      })
+
+      if (newCurrentPage !== currentPage) {
+        setCurrentPage(newCurrentPage)
+      }
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [currentPage])
+
+  // Navigate to specific page
+  const goToPage = (pageNum: number) => {
+    const element = pageRefs.current.get(pageNum)
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  // NOTE: On Jobs page, ALL OFS grades are blurred for free users (no top 3 exception)
+  // The top 3 exception only applies to the Facilities page
 
   return (
     <div className="space-y-6">
@@ -218,7 +415,7 @@ export default function Jobs() {
                 type="text"
                 placeholder="Search jobs by title or description..."
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(0) }}
+                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }}
                 className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
             </div>
@@ -249,12 +446,12 @@ export default function Jobs() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
                   <select
                     value={filters.nursing_type}
-                    onChange={(e) => { setFilters(f => ({ ...f, nursing_type: e.target.value })); setPage(0) }}
+                    onChange={(e) => { setFilters(f => ({ ...f, nursing_type: e.target.value })); setCurrentPage(1) }}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
                   >
                     <option value="">All Types</option>
                     {filterOptions?.nursing_types?.map((t: string) => (
-                      <option key={t} value={t}>{t}</option>
+                      <option key={t} value={t}>{formatNursingType(t)}</option>
                     ))}
                   </select>
                 </div>
@@ -263,12 +460,12 @@ export default function Jobs() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Specialty</label>
                   <select
                     value={filters.specialty}
-                    onChange={(e) => { setFilters(f => ({ ...f, specialty: e.target.value })); setPage(0) }}
+                    onChange={(e) => { setFilters(f => ({ ...f, specialty: e.target.value })); setCurrentPage(1) }}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
                   >
                     <option value="">All Specialties</option>
                     {filterOptions?.specialties?.map((s: string) => (
-                      <option key={s} value={s}>{s}</option>
+                      <option key={s} value={s}>{formatSpecialty(s)}</option>
                     ))}
                   </select>
                 </div>
@@ -277,7 +474,7 @@ export default function Jobs() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Employment</label>
                   <select
                     value={filters.employment_type}
-                    onChange={(e) => { setFilters(f => ({ ...f, employment_type: e.target.value })); setPage(0) }}
+                    onChange={(e) => { setFilters(f => ({ ...f, employment_type: e.target.value })); setCurrentPage(1) }}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
                   >
                     <option value="">All Employment</option>
@@ -291,7 +488,7 @@ export default function Jobs() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Shift</label>
                   <select
                     value={filters.shift_type}
-                    onChange={(e) => { setFilters(f => ({ ...f, shift_type: e.target.value })); setPage(0) }}
+                    onChange={(e) => { setFilters(f => ({ ...f, shift_type: e.target.value })); setCurrentPage(1) }}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
                   >
                     <option value="">All Shifts</option>
@@ -305,7 +502,7 @@ export default function Jobs() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Region</label>
                   <select
                     value={filters.region}
-                    onChange={(e) => { setFilters(f => ({ ...f, region: e.target.value })); setPage(0) }}
+                    onChange={(e) => { setFilters(f => ({ ...f, region: e.target.value })); setCurrentPage(1) }}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
                   >
                     <option value="">All Regions</option>
@@ -316,13 +513,13 @@ export default function Jobs() {
                 </div>
               </div>
 
-              {/* Row 2: New filters - Health System, OFS Grade, Posted */}
+              {/* Row 2: Health System, Facility, Facility Grade, Posted */}
               <div className="flex flex-wrap gap-4 mb-4 pt-4 border-t border-slate-100">
                 <div className="flex-1 min-w-[160px]">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Health System</label>
                   <select
                     value={filters.facility_system}
-                    onChange={(e) => { setFilters(f => ({ ...f, facility_system: e.target.value })); setPage(0) }}
+                    onChange={(e) => { setFilters(f => ({ ...f, facility_system: e.target.value })); setCurrentPage(1) }}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
                   >
                     <option value="">All Systems</option>
@@ -332,25 +529,49 @@ export default function Jobs() {
                   </select>
                 </div>
 
-                <div className="flex-1 min-w-[140px]">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Facility Grade</label>
+                <div className="flex-1 min-w-[180px]">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Facility</label>
                   <select
-                    value={filters.ofs_grade}
-                    onChange={(e) => { setFilters(f => ({ ...f, ofs_grade: e.target.value })); setPage(0) }}
+                    value={filters.facility_id}
+                    onChange={(e) => { setFilters(f => ({ ...f, facility_id: e.target.value })); setCurrentPage(1) }}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
                   >
-                    <option value="">All Grades</option>
-                    {filterOptions?.ofs_grades?.map((g: string) => (
-                      <option key={g} value={g}>Grade {g}</option>
+                    <option value="">All Facilities</option>
+                    {filterOptions?.facilities?.map((f: { id: string, name: string, city: string }) => (
+                      <option key={f.id} value={f.id}>{f.name} ({f.city})</option>
                     ))}
                   </select>
+                </div>
+
+                <div className="flex-1 min-w-[140px]">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Facility Grade</label>
+                  {isPaidUser ? (
+                    <select
+                      value={filters.ofs_grade}
+                      onChange={(e) => { setFilters(f => ({ ...f, ofs_grade: e.target.value })); setCurrentPage(1) }}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                    >
+                      <option value="">All Grades</option>
+                      {filterOptions?.ofs_grades?.map((g: string) => (
+                        <option key={g} value={g}>Grade {g}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Link
+                      to="/billing"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-400 flex items-center gap-2 hover:bg-slate-100 transition-colors"
+                    >
+                      <Lock className="w-3 h-3" />
+                      <span>Upgrade to filter by grade</span>
+                    </Link>
+                  )}
                 </div>
 
                 <div className="flex-1 min-w-[140px]">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Posted</label>
                   <select
                     value={filters.posted_within_days}
-                    onChange={(e) => { setFilters(f => ({ ...f, posted_within_days: e.target.value })); setPage(0) }}
+                    onChange={(e) => { setFilters(f => ({ ...f, posted_within_days: e.target.value })); setCurrentPage(1) }}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
                   >
                     <option value="">Any Time</option>
@@ -361,7 +582,91 @@ export default function Jobs() {
                 </div>
               </div>
 
-              {/* Row 3: Pay Range and Checkboxes */}
+              {/* Row 3: Distance/Location and Childcare */}
+              <div className="flex flex-wrap gap-4 mb-4 pt-4 border-t border-slate-100">
+                {/* Distance Filter */}
+                <div className="flex-1 min-w-[200px]">
+                  <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-primary-500" />
+                    Sort by Distance
+                  </label>
+                  <select
+                    value={distanceMode}
+                    onChange={(e) => { setDistanceMode(e.target.value as 'none' | 'profile' | 'custom'); setCurrentPage(1) }}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                  >
+                    <option value="none">Most Recent First</option>
+                    {auth.isAuthenticated && userPrefs?.location_zip && (
+                      <option value="profile">From My Location ({userPrefs.location_zip})</option>
+                    )}
+                    <option value="custom">Enter Zip Code</option>
+                  </select>
+                </div>
+
+                {/* Custom Zip Code Input - only show when custom mode selected */}
+                {distanceMode === 'custom' && (
+                  <div className="flex-1 min-w-[140px]">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Zip Code</label>
+                    <input
+                      type="text"
+                      placeholder="22101"
+                      value={customZip}
+                      onChange={(e) => { setCustomZip(e.target.value.replace(/\D/g, '').slice(0, 5)); setCurrentPage(1) }}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                      maxLength={5}
+                    />
+                  </div>
+                )}
+
+                {/* Max Distance Filter - only show when distance sorting is active */}
+                {distanceMode !== 'none' && (
+                  <div className="flex-1 min-w-[140px]">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Max Distance</label>
+                    <select
+                      value={maxDistance}
+                      onChange={(e) => { setMaxDistance(e.target.value); setCurrentPage(1) }}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                    >
+                      <option value="">Any Distance</option>
+                      <option value="10">Within 10 miles</option>
+                      <option value="25">Within 25 miles</option>
+                      <option value="50">Within 50 miles</option>
+                      <option value="100">Within 100 miles</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* Childcare */}
+                <div className="flex-1 min-w-[180px]">
+                  <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-2">
+                    <Baby className="w-4 h-4 text-pink-500" />
+                    Childcare
+                    {!isPaidUser && <span title="Premium feature"><Crown className="w-3 h-3 text-amber-500" /></span>}
+                  </label>
+                  {isPaidUser ? (
+                    <select
+                      value={filters.childcare}
+                      onChange={(e) => { setFilters(f => ({ ...f, childcare: e.target.value })); setCurrentPage(1) }}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                    >
+                      <option value="">Any</option>
+                      {filterOptions?.childcare_options?.map((o: { value: string, label: string }) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Link
+                      to="/billing"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-400 flex items-center gap-2 cursor-pointer hover:border-primary-300"
+                    >
+                      <Lock className="w-3 h-3" />
+                      <span>Upgrade to filter by childcare</span>
+                    </Link>
+                  )}
+                </div>
+              </div>
+
+              {/* Row 4: Pay Range and Checkboxes */}
               <div className="flex flex-wrap items-end gap-4 pt-4 border-t border-slate-100">
                 <div className="flex items-end gap-2">
                   <div>
@@ -370,7 +675,7 @@ export default function Jobs() {
                       type="number"
                       placeholder="25"
                       value={filters.min_pay}
-                      onChange={(e) => { setFilters(f => ({ ...f, min_pay: e.target.value })); setPage(0) }}
+                      onChange={(e) => { setFilters(f => ({ ...f, min_pay: e.target.value })); setCurrentPage(1) }}
                       className="w-24 px-3 py-2 border border-slate-200 rounded-lg text-sm"
                     />
                   </div>
@@ -381,7 +686,7 @@ export default function Jobs() {
                       type="number"
                       placeholder="75"
                       value={filters.max_pay}
-                      onChange={(e) => { setFilters(f => ({ ...f, max_pay: e.target.value })); setPage(0) }}
+                      onChange={(e) => { setFilters(f => ({ ...f, max_pay: e.target.value })); setCurrentPage(1) }}
                       className="w-24 px-3 py-2 border border-slate-200 rounded-lg text-sm"
                     />
                   </div>
@@ -391,7 +696,7 @@ export default function Jobs() {
                   <input
                     type="checkbox"
                     checked={filters.pay_disclosed_only}
-                    onChange={(e) => { setFilters(f => ({ ...f, pay_disclosed_only: e.target.checked })); setPage(0) }}
+                    onChange={(e) => { setFilters(f => ({ ...f, pay_disclosed_only: e.target.checked })); setCurrentPage(1) }}
                     className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
                   />
                   <span className="text-sm text-slate-700">Pay disclosed only</span>
@@ -401,7 +706,7 @@ export default function Jobs() {
                   <input
                     type="checkbox"
                     checked={filters.has_sign_on_bonus}
-                    onChange={(e) => { setFilters(f => ({ ...f, has_sign_on_bonus: e.target.checked })); setPage(0) }}
+                    onChange={(e) => { setFilters(f => ({ ...f, has_sign_on_bonus: e.target.checked })); setCurrentPage(1) }}
                     className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
                   />
                   <Gift className="w-4 h-4 text-emerald-500" />
@@ -412,12 +717,62 @@ export default function Jobs() {
                   <input
                     type="checkbox"
                     checked={filters.has_relocation}
-                    onChange={(e) => { setFilters(f => ({ ...f, has_relocation: e.target.checked })); setPage(0) }}
+                    onChange={(e) => { setFilters(f => ({ ...f, has_relocation: e.target.checked })); setCurrentPage(1) }}
                     className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
                   />
                   <Truck className="w-4 h-4 text-blue-500" />
                   <span className="text-sm text-slate-700">Relocation assistance</span>
                 </label>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={filters.new_grad_friendly}
+                    onChange={(e) => { setFilters(f => ({ ...f, new_grad_friendly: e.target.checked })); setCurrentPage(1) }}
+                    className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <GraduationCap className="w-4 h-4 text-purple-500" />
+                  <span className="text-sm text-slate-700">New grad friendly</span>
+                </label>
+              </div>
+
+              {/* Row 5: Education & Certification Filters */}
+              <div className="flex flex-wrap items-end gap-4 pt-4 border-t border-slate-100">
+                <div className="flex-1 min-w-[160px]">
+                  <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-2">
+                    <GraduationCap className="w-4 h-4 text-indigo-500" />
+                    Education
+                  </label>
+                  <select
+                    value={filters.bsn_required}
+                    onChange={(e) => { setFilters(f => ({ ...f, bsn_required: e.target.value })); setCurrentPage(1) }}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                  >
+                    <option value="">Any Education</option>
+                    <option value="yes">BSN Required</option>
+                    <option value="no">ADN/ASN Accepted</option>
+                  </select>
+                </div>
+
+                <div className="flex-1 min-w-[160px]">
+                  <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-2">
+                    <Award className="w-4 h-4 text-amber-500" />
+                    Certification Required
+                  </label>
+                  <select
+                    value={filters.certification}
+                    onChange={(e) => { setFilters(f => ({ ...f, certification: e.target.value })); setCurrentPage(1) }}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                  >
+                    <option value="">Any Certification</option>
+                    <option value="ACLS">ACLS</option>
+                    <option value="BLS">BLS</option>
+                    <option value="PALS">PALS</option>
+                    <option value="NRP">NRP</option>
+                    <option value="TNCC">TNCC</option>
+                    <option value="CCRN">CCRN</option>
+                  </select>
+                </div>
               </div>
 
               {/* Active Filters */}
@@ -426,16 +781,16 @@ export default function Jobs() {
                   <div className="flex flex-wrap gap-2">
                     {filters.nursing_type && (
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 rounded-full text-sm">
-                        {filters.nursing_type}
-                        <button onClick={() => { setFilters(f => ({ ...f, nursing_type: '' })); setPage(0) }}>
+                        {formatNursingType(filters.nursing_type)}
+                        <button onClick={() => { setFilters(f => ({ ...f, nursing_type: '' })); setCurrentPage(1) }}>
                           <X className="w-3 h-3 text-slate-500 hover:text-slate-700" />
                         </button>
                       </span>
                     )}
                     {filters.specialty && (
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 rounded-full text-sm">
-                        {filters.specialty}
-                        <button onClick={() => { setFilters(f => ({ ...f, specialty: '' })); setPage(0) }}>
+                        {formatSpecialty(filters.specialty)}
+                        <button onClick={() => { setFilters(f => ({ ...f, specialty: '' })); setCurrentPage(1) }}>
                           <X className="w-3 h-3 text-slate-500 hover:text-slate-700" />
                         </button>
                       </span>
@@ -443,7 +798,7 @@ export default function Jobs() {
                     {filters.employment_type && (
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 rounded-full text-sm">
                         {formatEmploymentType(filters.employment_type)}
-                        <button onClick={() => { setFilters(f => ({ ...f, employment_type: '' })); setPage(0) }}>
+                        <button onClick={() => { setFilters(f => ({ ...f, employment_type: '' })); setCurrentPage(1) }}>
                           <X className="w-3 h-3 text-slate-500 hover:text-slate-700" />
                         </button>
                       </span>
@@ -451,7 +806,7 @@ export default function Jobs() {
                     {filters.shift_type && (
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 rounded-full text-sm">
                         {filters.shift_type}
-                        <button onClick={() => { setFilters(f => ({ ...f, shift_type: '' })); setPage(0) }}>
+                        <button onClick={() => { setFilters(f => ({ ...f, shift_type: '' })); setCurrentPage(1) }}>
                           <X className="w-3 h-3 text-slate-500 hover:text-slate-700" />
                         </button>
                       </span>
@@ -459,7 +814,7 @@ export default function Jobs() {
                     {filters.region && (
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 rounded-full text-sm">
                         {filters.region}
-                        <button onClick={() => { setFilters(f => ({ ...f, region: '' })); setPage(0) }}>
+                        <button onClick={() => { setFilters(f => ({ ...f, region: '' })); setCurrentPage(1) }}>
                           <X className="w-3 h-3 text-slate-500 hover:text-slate-700" />
                         </button>
                       </span>
@@ -468,8 +823,26 @@ export default function Jobs() {
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm">
                         <Building2 className="w-3 h-3" />
                         {filters.facility_system}
-                        <button onClick={() => { setFilters(f => ({ ...f, facility_system: '' })); setPage(0) }}>
+                        <button onClick={() => { setFilters(f => ({ ...f, facility_system: '' })); setCurrentPage(1) }}>
                           <X className="w-3 h-3 text-purple-500 hover:text-purple-700" />
+                        </button>
+                      </span>
+                    )}
+                    {filters.facility_id && (
+                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm">
+                        <Building2 className="w-3 h-3" />
+                        {filterOptions?.facilities?.find((f: any) => f.id === filters.facility_id)?.name || 'Facility'}
+                        <button onClick={() => { setFilters(f => ({ ...f, facility_id: '' })); setCurrentPage(1) }}>
+                          <X className="w-3 h-3 text-indigo-500 hover:text-indigo-700" />
+                        </button>
+                      </span>
+                    )}
+                    {filters.childcare && (
+                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-pink-100 text-pink-700 rounded-full text-sm">
+                        <Baby className="w-3 h-3" />
+                        {filters.childcare === 'onsite' ? 'On-site childcare' : 'Childcare nearby'}
+                        <button onClick={() => { setFilters(f => ({ ...f, childcare: '' })); setCurrentPage(1) }}>
+                          <X className="w-3 h-3 text-pink-500 hover:text-pink-700" />
                         </button>
                       </span>
                     )}
@@ -477,7 +850,7 @@ export default function Jobs() {
                       <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm ${getGradeColor(filters.ofs_grade)}`}>
                         <Award className="w-3 h-3" />
                         Grade {filters.ofs_grade}
-                        <button onClick={() => { setFilters(f => ({ ...f, ofs_grade: '' })); setPage(0) }}>
+                        <button onClick={() => { setFilters(f => ({ ...f, ofs_grade: '' })); setCurrentPage(1) }}>
                           <X className="w-3 h-3" />
                         </button>
                       </span>
@@ -486,7 +859,7 @@ export default function Jobs() {
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm">
                         <Calendar className="w-3 h-3" />
                         Last {filters.posted_within_days} {parseInt(filters.posted_within_days) === 1 ? 'day' : 'days'}
-                        <button onClick={() => { setFilters(f => ({ ...f, posted_within_days: '' })); setPage(0) }}>
+                        <button onClick={() => { setFilters(f => ({ ...f, posted_within_days: '' })); setCurrentPage(1) }}>
                           <X className="w-3 h-3 text-amber-500 hover:text-amber-700" />
                         </button>
                       </span>
@@ -494,7 +867,7 @@ export default function Jobs() {
                     {(filters.min_pay || filters.max_pay) && (
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 rounded-full text-sm">
                         ${filters.min_pay || '0'} - ${filters.max_pay || '∞'}/hr
-                        <button onClick={() => { setFilters(f => ({ ...f, min_pay: '', max_pay: '' })); setPage(0) }}>
+                        <button onClick={() => { setFilters(f => ({ ...f, min_pay: '', max_pay: '' })); setCurrentPage(1) }}>
                           <X className="w-3 h-3 text-slate-500 hover:text-slate-700" />
                         </button>
                       </span>
@@ -503,7 +876,7 @@ export default function Jobs() {
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm">
                         <Gift className="w-3 h-3" />
                         Sign-on bonus
-                        <button onClick={() => { setFilters(f => ({ ...f, has_sign_on_bonus: false })); setPage(0) }}>
+                        <button onClick={() => { setFilters(f => ({ ...f, has_sign_on_bonus: false })); setCurrentPage(1) }}>
                           <X className="w-3 h-3 text-emerald-500 hover:text-emerald-700" />
                         </button>
                       </span>
@@ -512,8 +885,35 @@ export default function Jobs() {
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
                         <Truck className="w-3 h-3" />
                         Relocation
-                        <button onClick={() => { setFilters(f => ({ ...f, has_relocation: false })); setPage(0) }}>
+                        <button onClick={() => { setFilters(f => ({ ...f, has_relocation: false })); setCurrentPage(1) }}>
                           <X className="w-3 h-3 text-blue-500 hover:text-blue-700" />
+                        </button>
+                      </span>
+                    )}
+                    {filters.new_grad_friendly && (
+                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm">
+                        <GraduationCap className="w-3 h-3" />
+                        New Grad Friendly
+                        <button onClick={() => { setFilters(f => ({ ...f, new_grad_friendly: false })); setCurrentPage(1) }}>
+                          <X className="w-3 h-3 text-purple-500 hover:text-purple-700" />
+                        </button>
+                      </span>
+                    )}
+                    {filters.bsn_required && (
+                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm">
+                        <GraduationCap className="w-3 h-3" />
+                        {filters.bsn_required === 'yes' ? 'BSN Required' : 'ADN/ASN Accepted'}
+                        <button onClick={() => { setFilters(f => ({ ...f, bsn_required: '' })); setCurrentPage(1) }}>
+                          <X className="w-3 h-3 text-indigo-500 hover:text-indigo-700" />
+                        </button>
+                      </span>
+                    )}
+                    {filters.certification && (
+                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm">
+                        <Award className="w-3 h-3" />
+                        {filters.certification} Required
+                        <button onClick={() => { setFilters(f => ({ ...f, certification: '' })); setCurrentPage(1) }}>
+                          <X className="w-3 h-3 text-amber-500 hover:text-amber-700" />
                         </button>
                       </span>
                     )}
@@ -541,23 +941,26 @@ export default function Jobs() {
           <p className="text-slate-500">No jobs found matching your criteria.</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {jobs.map((job: any) => (
-            <div
-              key={job.id}
-              className="bg-white rounded-xl border border-slate-200 p-6 hover:border-primary-300 hover:shadow-md transition-all cursor-pointer"
-              onClick={() => { setSelectedJob(job); setDrawerOpen(true); }}
-            >
+        <div className="space-y-4" ref={jobsContainerRef}>
+          {jobs.map((job: any, index: number) => {
+            const pageNum = Math.floor(index / limit) + 1
+            const isFirstOfPage = index % limit === 0
+            return (
+              <div
+                key={job.id}
+                ref={isFirstOfPage ? (el) => { if (el) pageRefs.current.set(pageNum, el) } : undefined}
+                className="bg-white rounded-xl border border-slate-200 p-6 hover:border-primary-300 hover:shadow-md transition-all cursor-pointer"
+                onClick={() => { setSelectedJob(job); setDrawerOpen(true); }}
+              >
               <div className="flex flex-col lg:flex-row lg:items-start gap-4">
                 <div className="flex-1">
                   <div className="flex items-start gap-3 mb-2">
-                    <h3 className="text-lg font-semibold text-slate-900 flex-1 hover:text-primary-600 transition-colors">
+                    <h3 className="text-lg font-semibold text-primary-600 flex-1 hover:text-primary-700 hover:underline transition-colors cursor-pointer">
                       {toTitleCase(job.title)}
                     </h3>
-                    {/* Facility Score Badge - Show for paid users OR if facility is in top 3 */}
-                    {job.facility_ofs_grade && (() => {
-                      const canSeeThisGrade = isPaidUser || top3FacilityIds.has(job.facility_id)
-                      return canSeeThisGrade ? (
+                    {/* Facility Score Badge - Paid feature: blurred for free users */}
+                    {job.facility_ofs_grade && (
+                      isPaidUser ? (
                         <div className="flex flex-col items-center" title="Facility Score (10 indices)">
                           <span className="text-[8px] text-slate-400 uppercase tracking-wider leading-tight">Facility Score</span>
                           <span className={`px-2 py-1 text-xs font-bold rounded ${getGradeColor(job.facility_ofs_grade[0])}`} title={`OFS: ${job.facility_ofs_score}/100`}>
@@ -585,24 +988,33 @@ export default function Jobs() {
                           </div>
                         </div>
                       )
-                    })()}
+                    )}
                   </div>
 
                   {job.facility_name && (
-                    <div className="flex items-center gap-2 text-primary-600 mb-3">
+                    <Link
+                      to={`/facilities/${job.facility_id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-2 text-primary-600 hover:text-primary-700 hover:underline mb-3"
+                    >
                       <Building2 className="w-4 h-4" />
                       <span className="font-medium">{toTitleCase(job.facility_name)}</span>
                       {job.facility_system && (
                         <span className="text-slate-400">• {toTitleCase(job.facility_system)}</span>
                       )}
-                    </div>
+                    </Link>
                   )}
 
                   <div className="flex flex-wrap gap-4 text-sm text-slate-600">
-                    {job.city && (
+                    {(job.facility_city || job.city) && (
                       <span className="flex items-center gap-1">
                         <MapPin className="w-4 h-4" />
-                        {job.city}, {job.state}
+                        {job.facility_city || job.city}, {job.state}
+                        {job.distance_miles != null && (
+                          <span className="text-primary-600 font-medium ml-1">
+                            • {job.distance_miles < 1 ? '< 1' : Math.round(job.distance_miles)} mi
+                          </span>
+                        )}
                       </span>
                     )}
                     {job.shift_type && (
@@ -653,7 +1065,8 @@ export default function Jobs() {
                       ) : (
                         <span className="flex items-center gap-1 text-slate-400 group/market relative">
                           <TrendingUp className="w-4 h-4" />
-                          <span className="blur-sm select-none">Market: $32-$45/hr</span>
+                          <span>Market Rate:</span>
+                          <span className="blur-sm select-none">$32-$45/hr</span>
                           <Lock className="w-3 h-3 text-slate-300 ml-1" />
                         </span>
                       )
@@ -664,12 +1077,12 @@ export default function Jobs() {
                 <div className="flex flex-wrap gap-2">
                   {job.nursing_type && (
                     <span className="px-3 py-1 bg-primary-50 text-primary-700 text-sm rounded-full">
-                      {job.nursing_type}
+                      {formatNursingType(job.nursing_type)}
                     </span>
                   )}
                   {job.specialty && (
                     <span className="px-3 py-1 bg-slate-100 text-slate-700 text-sm rounded-full">
-                      {job.specialty}
+                      {formatSpecialty(job.specialty)}
                     </span>
                   )}
                   {job.employment_type && (
@@ -677,10 +1090,64 @@ export default function Jobs() {
                       {formatEmploymentType(job.employment_type)}
                     </span>
                   )}
+                  {/* Enrichment Tags */}
+                  {(job.bonus_from_enrichment || job.sign_on_bonus) && (
+                    <span className="px-3 py-1 bg-green-100 text-green-700 text-sm rounded-full flex items-center gap-1">
+                      <Gift className="w-3 h-3" />
+                      Bonus
+                    </span>
+                  )}
+                  {job.experience_req && /new.?grad|entry.?level|0.year|graduate nurse|residency/i.test(job.experience_req) && (
+                    <span className="px-3 py-1 bg-purple-100 text-purple-700 text-sm rounded-full flex items-center gap-1">
+                      <GraduationCap className="w-3 h-3" />
+                      New Grad
+                    </span>
+                  )}
+                  {job.education_req && /BSN.*(required|preferred|must)/i.test(job.education_req) && (
+                    <span className="px-3 py-1 bg-indigo-100 text-indigo-700 text-sm rounded-full">
+                      BSN
+                    </span>
+                  )}
+                  {job.education_req && /(ADN|ASN|Associate).*(accepted|ok|considered)/i.test(job.education_req) && (
+                    <span className="px-3 py-1 bg-teal-100 text-teal-700 text-sm rounded-full">
+                      ADN OK
+                    </span>
+                  )}
+                  {job.certifications_req && /ACLS/i.test(job.certifications_req) && (
+                    <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">
+                      ACLS
+                    </span>
+                  )}
+                  {job.certifications_req && /BLS/i.test(job.certifications_req) && (
+                    <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">
+                      BLS
+                    </span>
+                  )}
+                  {job.certifications_req && /PALS/i.test(job.certifications_req) && (
+                    <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">
+                      PALS
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
-          ))}
+          )})
+          }
+
+          {/* Load more trigger for infinite scroll */}
+          <div ref={loadMoreRef} className="py-4">
+            {isFetchingNextPage && (
+              <div className="flex items-center justify-center gap-2 text-slate-500">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Loading more jobs...</span>
+              </div>
+            )}
+            {!hasNextPage && jobs.length > 0 && (
+              <p className="text-center text-slate-400 text-sm">
+                You've seen all {total.toLocaleString()} jobs
+              </p>
+            )}
+          </div>
         </div>
       )}
 
@@ -688,31 +1155,51 @@ export default function Jobs() {
       <JobPreviewDrawer
         job={selectedJob}
         isOpen={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onClose={closeDrawer}
       />
 
-      {/* Pagination */}
-      {total > limit && (
-        <div className="flex items-center justify-center gap-4">
-          <button
-            onClick={() => setPage(p => Math.max(0, p - 1))}
-            disabled={page === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg disabled:opacity-50"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Previous
-          </button>
-          <span className="text-sm text-slate-600">
-            Page {page + 1} of {Math.ceil(total / limit)}
-          </span>
-          <button
-            onClick={() => setPage(p => p + 1)}
-            disabled={(page + 1) * limit >= total}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg disabled:opacity-50"
-          >
-            Next
-            <ChevronRight className="w-4 h-4" />
-          </button>
+      {/* Floating Page Indicator with Navigation */}
+      {totalPages > 1 && jobs.length > 0 && (
+        <div className="fixed bottom-24 right-6 z-40 flex flex-col items-end gap-2">
+          {/* Back to top button */}
+          {currentPage > 1 && (
+            <button
+              onClick={() => {
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+                setCurrentPage(1)
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 bg-white shadow-lg rounded-lg border border-slate-200 hover:bg-slate-50 text-sm text-slate-600"
+            >
+              <ChevronUp className="w-4 h-4" />
+              Back to top
+            </button>
+          )}
+          {/* Page indicator */}
+          <div className="flex items-center gap-2 bg-white shadow-lg rounded-lg border border-slate-200 px-3 py-2">
+            <button
+              onClick={() => goToPage(Math.max(1, currentPage - 1))}
+              disabled={currentPage <= 1}
+              className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-medium text-slate-700 min-w-[80px] text-center">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => {
+                if (currentPage < (data?.pages.length || 0)) {
+                  goToPage(currentPage + 1)
+                } else if (hasNextPage) {
+                  fetchNextPage()
+                }
+              }}
+              disabled={currentPage >= totalPages}
+              className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -46,15 +46,91 @@ const STATUS_CONFIG = {
 const KANBAN_COLUMNS = ['clicked', 'applied', 'screening', 'interviewing', 'offer'] as const
 
 export default function Applications() {
+  // ALL HOOKS MUST BE AT THE TOP - before any conditional returns
   const auth = useAuth()
-  const { isPaid } = useSubscription()
-  // Only show content if authenticated AND paid
-  const canAccessFeature = (auth.isAuthenticated && isPaid) || isAdminUnlocked()
+  const { isPaid, isLoading: subLoading, isFetched } = useSubscription()
   const queryClient = useQueryClient()
   const [view, setView] = useState<'kanban' | 'list'>('kanban')
   const [selectedApp, setSelectedApp] = useState<Application | null>(null)
   const [showAddNote, setShowAddNote] = useState(false)
   const [newNote, setNewNote] = useState('')
+  const [editingNextStep, setEditingNextStep] = useState(false)
+  const [nextStepData, setNextStepData] = useState({ step: '', date: '' })
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<string | null>(null)
+  const [updateError, setUpdateError] = useState<string | null>(null)
+
+  const { data: applications = [], isLoading } = useQuery<Application[]>({
+    queryKey: ['applications'],
+    queryFn: () => api.get('/api/applications').then(res => res.data),
+    enabled: auth.isAuthenticated && isPaid
+  })
+
+  const updateStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      api.patch(`/api/applications/${id}`, { status }),
+    onMutate: async ({ id, status }) => {
+      await queryClient.cancelQueries({ queryKey: ['applications'] })
+      const previousApps = queryClient.getQueryData<Application[]>(['applications'])
+      queryClient.setQueryData<Application[]>(['applications'], (old) =>
+        old?.map((app) => (app.id === id ? { ...app, status: status as Application['status'] } : app)) || []
+      )
+      return { previousApps }
+    },
+    onError: (err, variables, context) => {
+      if (context?.previousApps) {
+        queryClient.setQueryData(['applications'], context.previousApps)
+      }
+      setUpdateError('Failed to update status. Please try again.')
+      setTimeout(() => setUpdateError(null), 3000)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['applications'] })
+    }
+  })
+
+  const addNote = useMutation({
+    mutationFn: ({ id, note }: { id: string; note: string }) =>
+      api.post(`/api/applications/${id}/notes`, { note }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['applications'] })
+      setNewNote('')
+      setShowAddNote(false)
+    }
+  })
+
+  const updateNextStep = useMutation({
+    mutationFn: ({ id, next_step, next_step_date }: { id: string; next_step: string; next_step_date: string | null }) =>
+      api.patch(`/api/applications/${id}`, { next_step, next_step_date }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['applications'] })
+      setEditingNextStep(false)
+    }
+  })
+
+  const deleteApplication = useMutation({
+    mutationFn: (id: string) => api.delete(`/api/applications/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['applications'] })
+      setSelectedApp(null)
+    }
+  })
+
+  // Only show content if authenticated AND paid
+  const canAccessFeature = (auth.isAuthenticated && isPaid) || isAdminUnlocked()
+
+  // Show loading spinner while auth or subscription is being checked
+  const stillLoading = auth.isLoading || subLoading || (auth.isAuthenticated && !isFetched)
+  if (stillLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full mx-auto mb-2" />
+          <p className="text-sm text-slate-500">Loading subscription...</p>
+        </div>
+      </div>
+    )
+  }
 
   // Sample data for demo
   const sampleApplications = [
@@ -154,75 +230,8 @@ export default function Applications() {
       </BlurOverlay>
     )
   }
-  const [editingNextStep, setEditingNextStep] = useState(false)
-  const [nextStepData, setNextStepData] = useState({ step: '', date: '' })
 
-  // Drag and drop state for visual feedback
-  const [draggingId, setDraggingId] = useState<string | null>(null)
-  const [dropTarget, setDropTarget] = useState<string | null>(null)
-  const [updateError, setUpdateError] = useState<string | null>(null)
-
-  const { data: applications = [], isLoading } = useQuery<Application[]>({
-    queryKey: ['applications'],
-    queryFn: () => api.get('/api/applications').then(res => res.data)
-  })
-
-  const updateStatus = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      api.patch(`/api/applications/${id}`, { status }),
-    // Optimistic update for smooth drag & drop
-    onMutate: async ({ id, status }) => {
-      // Cancel any outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ['applications'] })
-      // Snapshot the previous value
-      const previousApps = queryClient.getQueryData<Application[]>(['applications'])
-      // Optimistically update to the new value
-      queryClient.setQueryData<Application[]>(['applications'], (old) =>
-        old?.map((app) => (app.id === id ? { ...app, status: status as Application['status'] } : app)) || []
-      )
-      // Return context with snapshot
-      return { previousApps }
-    },
-    onError: (err, variables, context) => {
-      // Rollback on error
-      if (context?.previousApps) {
-        queryClient.setQueryData(['applications'], context.previousApps)
-      }
-      setUpdateError('Failed to update status. Please try again.')
-      setTimeout(() => setUpdateError(null), 3000)
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['applications'] })
-    }
-  })
-
-  const addNote = useMutation({
-    mutationFn: ({ id, note }: { id: string; note: string }) =>
-      api.post(`/api/applications/${id}/notes`, { note }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['applications'] })
-      setNewNote('')
-      setShowAddNote(false)
-    }
-  })
-
-  const updateNextStep = useMutation({
-    mutationFn: ({ id, next_step, next_step_date }: { id: string; next_step: string; next_step_date: string | null }) =>
-      api.patch(`/api/applications/${id}`, { next_step, next_step_date }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['applications'] })
-      setEditingNextStep(false)
-    }
-  })
-
-  const deleteApplication = useMutation({
-    mutationFn: (id: string) => api.delete(`/api/applications/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['applications'] })
-      setSelectedApp(null)
-    }
-  })
-
+  // Drag and drop handlers
   const handleDragStart = (e: React.DragEvent, app: Application) => {
     e.dataTransfer.setData('application/json', JSON.stringify(app))
     e.dataTransfer.effectAllowed = 'move'

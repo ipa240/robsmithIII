@@ -3,6 +3,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from ..database import get_db
+from ..utils.normalizer import (
+    to_display, normalize_region, get_canonical_regions,
+    normalize_specialty_display, SPECIALTY_MAP
+)
 
 router = APIRouter(prefix="/api", tags=["stats"])
 
@@ -86,7 +90,7 @@ async def get_stats(db: Session = Depends(get_db)):
 
 @router.get("/filters")
 async def get_filters(db: Session = Depends(get_db)):
-    """Get available filter options"""
+    """Get available filter options with proper formatting"""
 
     # Unique values for each filter
     nursing_types = db.execute(text("""
@@ -119,12 +123,6 @@ async def get_filters(db: Session = Depends(get_db)):
         ORDER BY city
     """))
 
-    regions = db.execute(text("""
-        SELECT DISTINCT region FROM facilities
-        WHERE region IS NOT NULL
-        ORDER BY region
-    """))
-
     # NEW: Facility systems
     facility_systems = db.execute(text("""
         SELECT DISTINCT system_name FROM facilities
@@ -132,21 +130,70 @@ async def get_filters(db: Session = Depends(get_db)):
         ORDER BY system_name
     """))
 
+    # All facilities for dropdown filter
+    all_facilities = db.execute(text("""
+        SELECT f.id, f.name, f.city
+        FROM facilities f
+        ORDER BY f.name
+    """))
+
+    # Format specialties using the normalizer
+    formatted_specialties = set()
+    for r in specialties:
+        if r[0]:
+            formatted_specialties.add(normalize_specialty_display(r[0]))
+
+    # Format employment types
+    formatted_employment = set()
+    for r in employment_types:
+        if r[0]:
+            formatted_employment.add(to_display(r[0], "employment_type"))
+
+    # Format shift types
+    formatted_shifts = set()
+    for r in shift_types:
+        if r[0]:
+            formatted_shifts.add(to_display(r[0], "shift_type"))
+
+    # Clean up cities - remove facility names that got mixed in
+    # and normalize formatting
+    cleaned_cities = set()
+    facility_name_indicators = ['hospital', 'medical center', 'health', 'clinic', 'sentara', 'inova', 'bon secours']
+    for r in cities:
+        if r[0]:
+            city = r[0].strip()
+            # Skip if it looks like a facility name
+            if not any(indicator in city.lower() for indicator in facility_name_indicators):
+                # Normalize unicode characters (en-dash to hyphen, etc.)
+                city = city.replace('–', '-').replace('—', '-')
+                cleaned_cities.add(city)
+
+    # Build facilities list for dropdown
+    facilities_list = [
+        {"id": str(r[0]), "name": r[1], "city": r[2]}
+        for r in all_facilities if r[0]
+    ]
+
     return {
         "success": True,
         "data": {
             "nursing_types": [r[0].upper() for r in nursing_types if r[0]],
-            "specialties": [r[0] for r in specialties if r[0]],
-            "employment_types": [r[0] for r in employment_types if r[0]],
-            "shift_types": [r[0] for r in shift_types if r[0]],
-            "cities": [r[0] for r in cities if r[0]],
-            "regions": [r[0] for r in regions if r[0]],
+            "specialties": sorted(list(formatted_specialties)),
+            "employment_types": sorted(list(formatted_employment)),
+            "shift_types": sorted(list(formatted_shifts)),
+            "cities": sorted(list(cleaned_cities)),
+            "regions": get_canonical_regions(),
             "facility_systems": [r[0] for r in facility_systems if r[0]],
+            "facilities": facilities_list,
             "ofs_grades": ["A", "B", "C", "D", "F"],
             "posted_within_options": [
                 {"value": 1, "label": "Last 24 hours"},
                 {"value": 7, "label": "Last 7 days"},
                 {"value": 30, "label": "Last 30 days"},
+            ],
+            "childcare_options": [
+                {"value": "onsite", "label": "On-site childcare"},
+                {"value": "nearby", "label": "Childcare nearby"},
             ]
         }
     }

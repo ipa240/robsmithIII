@@ -5,13 +5,13 @@ import { api } from '../api/client'
 const FREE_SAVE_LIMIT = 1 // Free users can save 1 job
 const STARTER_SAVE_LIMIT = -1 // Unlimited for paid
 
-interface SavedJobsResponse {
-  saved_jobs: Array<{
+interface SavedJobsApiResponse {
+  success: boolean
+  data: Array<{
     id: string
-    job_id: string
+    title: string
     saved_at: string
   }>
-  count: number
 }
 
 /**
@@ -22,18 +22,19 @@ interface SavedJobsResponse {
 export function useSavedJobLimit() {
   const { isPaid, tier } = useSubscription()
 
-  // Fetch saved jobs count from API
-  const { data, isLoading, refetch } = useQuery<SavedJobsResponse>({
-    queryKey: ['saved-jobs-count'],
+  // Fetch saved jobs count from API - use same key as JobDetail for cache sharing
+  const { data, isLoading, refetch } = useQuery<SavedJobsApiResponse>({
+    queryKey: ['saved-jobs'],
     queryFn: async () => {
-      const response = await api.get('/api/users/saved-jobs')
+      const response = await api.get('/api/me/saved-jobs')
       return response.data
     },
     staleTime: 30000, // Cache for 30 seconds
     retry: 1,
   })
 
-  const savedCount = data?.count || 0
+  // Count is derived from the data array length
+  const savedCount = data?.data?.length || 0
   const limit = isPaid ? STARTER_SAVE_LIMIT : FREE_SAVE_LIMIT
 
   /**

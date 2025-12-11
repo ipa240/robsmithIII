@@ -27,11 +27,18 @@ export function getAuthToken(): string | null {
   return currentToken
 }
 
+// Admin unlock storage key (matches useSubscription.ts)
+const ADMIN_UNLOCK_STORAGE_KEY = 'vanurses_admin_unlock'
+
 // Request interceptor to ensure token is always current
 api.interceptors.request.use(
   (config) => {
     if (currentToken && !config.headers['Authorization']) {
       config.headers['Authorization'] = `Bearer ${currentToken}`
+    }
+    // Add admin unlock header if unlocked
+    if (typeof window !== 'undefined' && localStorage.getItem(ADMIN_UNLOCK_STORAGE_KEY) === 'true') {
+      config.headers['X-Admin-Unlock'] = 'true'
     }
     return config
   },

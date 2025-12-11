@@ -9,7 +9,7 @@ import uuid
 import json
 
 from ..database import get_db
-from ..auth.zitadel import get_current_user, CurrentUser
+from ..auth.zitadel import get_current_user_with_db, CurrentUser
 
 router = APIRouter(prefix="/api/applications", tags=["applications"])
 
@@ -35,7 +35,7 @@ class NoteCreate(BaseModel):
 @router.get("")
 async def list_applications(
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """List all applications for the current user"""
     if not current_user or not current_user.user_id:
@@ -75,7 +75,7 @@ async def list_applications(
 async def create_application(
     data: ApplicationCreate,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Create a new job application"""
     if not current_user or not current_user.user_id:
@@ -134,7 +134,7 @@ async def create_application(
 @router.get("/stats/summary")
 async def get_application_stats(
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Get application statistics"""
     if not current_user or not current_user.user_id:
@@ -194,7 +194,7 @@ async def get_application_stats(
 async def get_application(
     application_id: str,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Get a specific application"""
     if not current_user or not current_user.user_id:
@@ -234,7 +234,7 @@ async def update_application(
     application_id: str,
     data: ApplicationUpdate,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Update an application"""
     if not current_user or not current_user.user_id:
@@ -279,7 +279,7 @@ async def add_note(
     application_id: str,
     data: NoteCreate,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Add a note to an application"""
     if not current_user or not current_user.user_id:
@@ -316,7 +316,7 @@ async def add_note(
 async def delete_application(
     application_id: str,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """Delete an application"""
     if not current_user or not current_user.user_id:
@@ -343,7 +343,7 @@ async def delete_application(
 async def track_apply_click(
     data: ApplicationCreate,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user_with_db)
 ):
     """
     Track when user clicks 'Apply' on a job.

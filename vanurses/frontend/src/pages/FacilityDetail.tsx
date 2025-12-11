@@ -1,8 +1,8 @@
 import { useParams, Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from 'react-oidc-context'
 import { useEffect, useState } from 'react'
-import { ArrowLeft, MapPin, Building2, Star, ExternalLink, Users, BarChart3, Lock, Crown, ChevronRight } from 'lucide-react'
+import { ArrowLeft, MapPin, Building2, Star, ExternalLink, Users, BarChart3, Lock, Unlock, Crown, ChevronRight, MessageCircle, Loader2 } from 'lucide-react'
 import { api, setAuthToken } from '../api/client'
 import { toTitleCase } from '../utils/format'
 import { isAdminUnlocked } from '../hooks/useSubscription'
@@ -11,6 +11,15 @@ import IndexRadar from '../components/scoring/IndexRadar'
 import IndexBreakdown from '../components/scoring/IndexBreakdown'
 import JTICard from '../components/scoring/JTICard'
 import FacilityAnalytics from '../components/FacilityAnalytics'
+import { NoFilterUnlockModal, NOFILTER_STORAGE_KEY, lockNoFilter } from '../components/NoFilterUnlockModal'
+
+// Sully moods with labels and colors
+const SULLY_MOODS = [
+  { id: 'optimistic', label: 'Optimistic', color: 'bg-emerald-500' },
+  { id: 'neutral', label: 'Neutral', color: 'bg-slate-500' },
+  { id: 'stern', label: 'Stern', color: 'bg-orange-500' },
+  { id: 'nofilter', label: 'No Filter', color: 'bg-red-500', premium: true },
+]
 
 function getGradeColor(grade: string) {
   const baseGrade = grade?.[0]?.toUpperCase() || ''
@@ -90,7 +99,7 @@ export default function FacilityDetail() {
   // Only show premium content if authenticated AND has paid tier OR admin unlocked
   const isPaidUser = (auth.isAuthenticated && ['starter', 'pro', 'premium'].includes(userTier.toLowerCase())) || isAdminUnlocked()
 
-  const { data: facility, isLoading } = useQuery({
+  const { data: facility, isLoading, error, isError } = useQuery({
     queryKey: ['facility', id],
     queryFn: () => api.get(`/api/facilities/${id}`).then(res => res.data.data)
   })
@@ -115,10 +124,63 @@ export default function FacilityDetail() {
     queryFn: () => api.get(`/api/facilities/${id}/transparency`).then(res => res.data.data)
   })
 
+  // Sully facility analysis
+  const [sullyMood, setSullyMood] = useState<string>('optimistic')
+  const [sullyOpinion, setSullyOpinion] = useState<string | null>(null)
+
+  // Check if No Filter mode is unlocked via localStorage (same unlock code as Sully page)
+  const [nofilterUnlocked, setNofilterUnlocked] = useState(() => {
+    return typeof window !== 'undefined' && localStorage.getItem(NOFILTER_STORAGE_KEY) === 'true'
+  })
+  const [showUnlockModal, setShowUnlockModal] = useState(false)
+
+  const handleLockNofilter = () => {
+    lockNoFilter()
+    setNofilterUnlocked(false)
+    if (sullyMood === 'nofilter') {
+      setSullyMood('neutral')
+    }
+  }
+
+  // Check if user can use NoFilter (requires unlock code OR admin unlocked)
+  // Subscription tier no longer matters - just needs the unlock code
+  const canUseNoFilter = nofilterUnlocked || isAdminUnlocked()
+
+  const facilityOpinion = useMutation({
+    mutationFn: async (mood: string) => {
+      const headers: Record<string, string> = {}
+      if (isAdminUnlocked()) {
+        headers['X-Admin-Unlock'] = 'true'
+      }
+      const response = await api.post('/api/sully/facility-opinion', {
+        facility_id: id,
+        mood: mood
+      }, { headers })
+      return response.data
+    },
+    onSuccess: (data) => {
+      setSullyOpinion(data.opinion)
+    }
+  })
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="animate-spin rounded-full h-10 w-10 border-4 border-primary-500 border-t-transparent"></div>
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="text-center py-20">
+        <h2 className="text-2xl font-bold text-slate-900 mb-4">Error Loading Facility</h2>
+        <p className="text-slate-600 mb-4">
+          {error instanceof Error ? error.message : 'An error occurred while loading this facility.'}
+        </p>
+        <Link to="/facilities" className="text-primary-600 hover:underline">
+          Back to Facilities
+        </Link>
       </div>
     )
   }
@@ -241,95 +303,170 @@ export default function FacilityDetail() {
         </div>
       </div>
 
+      {/* Sully Facility Analysis */}
+      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100 p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <img
+              src={`/media/sully/sully-${sullyMood === 'nofilter' ? 'nofilter' : sullyMood === 'stern' ? 'stern' : sullyMood === 'neutral' ? 'neutral' : 'optimistic'}.jpg`}
+              alt="Sully"
+              className="w-12 h-12 rounded-full object-cover flex-shrink-0 border-2 border-indigo-200"
+            />
+            <div>
+              <h2 className="font-semibold text-slate-900">Ask Sully</h2>
+              <p className="text-sm text-slate-500">AI-powered facility analysis</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Mood selector */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          {SULLY_MOODS.map((mood) => {
+            const isLocked = mood.premium && !canUseNoFilter
+            const isActive = sullyMood === mood.id
+            return (
+              <button
+                key={mood.id}
+                onClick={() => {
+                  if (isLocked) return
+                  setSullyMood(mood.id)
+                  setSullyOpinion(null)
+                }}
+                disabled={isLocked}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
+                  isActive
+                    ? `${mood.color} text-white`
+                    : isLocked
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {isLocked && <Lock className="w-3 h-3" />}
+                {mood.label}
+                {mood.premium && !isLocked && (
+                  <Crown className="w-3 h-3 text-amber-400" />
+                )}
+              </button>
+            )
+          })}
+          {!canUseNoFilter ? (
+            <button
+              onClick={() => setShowUnlockModal(true)}
+              className="text-xs text-primary-600 hover:underline flex items-center gap-1 ml-2"
+            >
+              <Lock className="w-3 h-3" />
+              Unlock No Filter
+            </button>
+          ) : nofilterUnlocked && (
+            <button
+              onClick={handleLockNofilter}
+              className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1 ml-2"
+              title="Lock No Filter mode"
+            >
+              <Unlock className="w-3 h-3" />
+              Lock
+            </button>
+          )}
+        </div>
+
+        {/* Get opinion button or result */}
+        {!sullyOpinion ? (
+          <button
+            onClick={() => {
+              if (!auth.isAuthenticated && !isAdminUnlocked()) {
+                // Could redirect to login
+                return
+              }
+              facilityOpinion.mutate(sullyMood)
+            }}
+            disabled={facilityOpinion.isPending}
+            className="w-full py-3 bg-gradient-to-r from-primary-600 to-accent-600 text-white rounded-lg font-medium hover:from-primary-700 hover:to-accent-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {facilityOpinion.isPending ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Analyzing...
+              </>
+            ) : !auth.isAuthenticated && !isAdminUnlocked() ? (
+              <>
+                <Lock className="w-4 h-4" />
+                Sign in to get Sully's opinion
+              </>
+            ) : (
+              <>
+                <MessageCircle className="w-4 h-4" />
+                What does Sully think?
+              </>
+            )}
+          </button>
+        ) : (
+          <div className="p-4 bg-white rounded-lg border border-indigo-200">
+            <div className="flex items-start gap-3">
+              <img
+                src={`/media/sully/sully-${sullyMood === 'nofilter' ? 'nofilter' : sullyMood === 'stern' ? 'stern' : sullyMood === 'neutral' ? 'neutral' : 'optimistic'}.jpg`}
+                alt="Sully"
+                className="w-10 h-10 rounded-full object-cover flex-shrink-0 border-2 border-indigo-200"
+              />
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-medium text-slate-900">Sully</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    SULLY_MOODS.find(m => m.id === sullyMood)?.color || 'bg-slate-500'
+                  } text-white`}>
+                    {SULLY_MOODS.find(m => m.id === sullyMood)?.label}
+                  </span>
+                </div>
+                <p className="text-slate-700">{sullyOpinion}</p>
+                <button
+                  onClick={() => setSullyOpinion(null)}
+                  className="text-xs text-primary-600 hover:underline mt-2"
+                >
+                  Ask again
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* OFS Scorecard */}
       {facility.score && facility.score.indices && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-slate-900">Overall Facility Score (OFS)</h2>
-            {!canSeeScore && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
-                <Crown className="w-3 h-3" />
-                Upgrade for full details
-              </span>
-            )}
+          <div className="flex items-center gap-3 mb-6">
+            <div className={`w-14 h-14 rounded-xl ${getGradeColor(facility.score.ofs_grade)} text-white flex items-center justify-center text-2xl font-bold shadow-lg`}>
+              {facility.score.ofs_grade || '?'}
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Overall Facility Score</h2>
+              <p className="text-sm text-slate-500">
+                Based on {Object.keys(facility.score.indices).length} quality indices
+              </p>
+            </div>
           </div>
 
-          {canSeeScore ? (
-            /* Full scorecard for paid users */
-            <div className="grid lg:grid-cols-2 gap-8">
-              {/* Left: Gauge + Radar */}
-              <div className="flex flex-col items-center gap-6">
-                <ScoreGauge
-                  score={facility.score.ofs_score}
-                  grade={facility.score.ofs_grade}
-                  size="lg"
-                />
-                <IndexRadar indices={facility.score.indices} />
-              </div>
-
-              {/* Right: Index Breakdown */}
-              <div>
-                <h3 className="text-sm font-medium text-slate-500 mb-4 uppercase tracking-wide">
-                  Score Breakdown by Index
-                </h3>
-                <IndexBreakdown indices={facility.score.indices} />
-                {/* Job Transparency - included with other indices */}
-                <div className="mt-6">
-                  <JTICard data={transparency} loading={transparencyLoading} compact />
-                </div>
-              </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            {/* Main Score Gauge */}
+            <div className="flex justify-center">
+              <ScoreGauge
+                score={facility.score.ofs_score}
+                grade={facility.score.ofs_grade}
+                size="lg"
+              />
             </div>
-          ) : (
-            /* Blurred content for free users */
-            <div className="relative">
-              {/* Blurred preview showing all 10 indices */}
-              <div className="blur-sm opacity-50 pointer-events-none select-none">
-                <div className="grid lg:grid-cols-2 gap-8">
-                  <div className="flex flex-col items-center gap-6">
-                    <div className="w-48 h-48 bg-slate-100 rounded-full flex items-center justify-center">
-                      <span className="text-4xl font-bold text-slate-300">A+</span>
-                    </div>
-                    <div className="w-64 h-64 bg-slate-100 rounded-lg" />
-                  </div>
-                  <div className="space-y-3">
-                    {/* 13 index placeholders */}
-                    {['Pay & Compensation', 'Employee Reviews', 'Safety & Security', 'Patient Experience', 'Facility Quality', 'CMS Quality', 'Amenities & Lifestyle', 'Job Transparency', 'Leapfrog Safety', 'Commute Score', 'Quality of Life', 'Opportunity Insights', 'Climate & Comfort'].map((name, i) => (
-                      <div key={i} className="h-10 bg-slate-100 rounded-lg flex items-center px-4">
-                        <span className="text-slate-400 text-sm">{name}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
 
-              {/* Overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-white via-white/90 to-white/70 flex items-center justify-center">
-                <div className="text-center p-6">
-                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary-100 text-primary-600 mb-3">
-                    <Lock className="w-6 h-6" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                    Unlock Facility Score
-                  </h3>
-                  <p className="text-slate-600 mb-4 max-w-md">
-                    See the OFS grade and all 13 scoring indices including Pay, Reviews, Safety, Patient Experience, Facility Quality, CMS Quality, Leapfrog Safety, Amenities, Transparency, Commute, Quality of Life, Opportunity Insights, and Climate.
-                  </p>
-                  <Link
-                    to="/billing"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-                  >
-                    <Crown className="w-4 h-4" />
-                    Upgrade to Starter
-                    <ChevronRight className="w-4 h-4" />
-                  </Link>
-                </div>
-              </div>
+            {/* Radar Chart */}
+            <div className="flex justify-center">
+              <IndexRadar indices={facility.score.indices} />
             </div>
-          )}
+          </div>
 
-          {facility.score.calculation_notes && isPaidUser && (
-            <div className="mt-6 p-4 bg-slate-50 rounded-lg">
-              <p className="text-sm text-slate-600">{facility.score.calculation_notes}</p>
+          {/* Index Breakdown */}
+          <IndexBreakdown indices={facility.score.indices} />
+
+          {/* JTI Card if available */}
+          {facility.jti && (
+            <div className="mt-6">
+              <JTICard data={facility.jti} />
             </div>
           )}
         </div>
@@ -341,25 +478,23 @@ export default function FacilityDetail() {
           <FacilityAnalytics facilityId={id || ''} facilityName={toTitleCase(facility.name)} />
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-slate-900">Advanced Analytics</h2>
-            <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
-              <Crown className="w-3 h-3" />
-              Pro
-            </span>
-          </div>
-          <div className="text-center py-8">
-            <Lock className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500 mb-4">
-              Historical trends, comparison tools, and detailed analytics available with Pro subscription.
-            </p>
+        <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+                <BarChart3 className="w-5 h-5 text-purple-600" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-slate-900">Advanced Analytics</h2>
+                <p className="text-sm text-slate-500">Trends, comparisons & detailed analysis</p>
+              </div>
+            </div>
             <Link
               to="/billing"
-              className="inline-flex items-center gap-2 text-primary-600 hover:text-primary-700 font-medium"
+              className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
             >
-              Upgrade to Pro
-              <ChevronRight className="w-4 h-4" />
+              <Crown className="w-3 h-3" />
+              Pro
             </Link>
           </div>
         </div>
@@ -415,6 +550,13 @@ export default function FacilityDetail() {
           </div>
         </div>
       )}
+
+      {/* NoFilter Unlock Modal */}
+      <NoFilterUnlockModal
+        isOpen={showUnlockModal}
+        onClose={() => setShowUnlockModal(false)}
+        onUnlock={() => setNofilterUnlocked(true)}
+      />
 
       {/* Open Jobs - blurred for non-paid users after first 2 */}
       {jobs && jobs.length > 0 && (

@@ -64,3 +64,8 @@ body {
 .animate-slide-in-right {
   animation: slide-in-right 0.2s ease-out;
 }
+
+/* Hide map when mobile menu is open */
+body.mobile-menu-open .leaflet-container {
+  display: none !important;
+}

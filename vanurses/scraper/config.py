@@ -60,6 +60,7 @@ WORKDAY_SYSTEMS = {
         'base_url': 'https://vhchealth.wd1.myworkdayjobs.com',
         'api_path': '/wday/cxs/vhchealth/VHCHealth/jobs',
         'facilities': 1,
+        'default_city': 'Arlington',  # All VHC jobs are in Arlington, VA
     },
 }
 

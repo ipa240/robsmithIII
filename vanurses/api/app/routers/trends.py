@@ -434,3 +434,378 @@ async def get_pay_trends(
         }
         for r in results
     ]
+
+
+@router.get("/regions/timeline")
+async def get_regional_trends_timeline(
+    timeframe: str = Query(default="6m", regex="^(3m|6m|1y)$"),
+    db: Session = Depends(get_db)
+):
+    """Get job volume over time by region"""
+    months = {"3m": 3, "6m": 6, "1y": 12}[timeframe]
+
+    results = db.execute(text("""
+        SELECT
+            COALESCE(f.region, 'Other') as region,
+            to_char(j.posted_at, 'Mon') as month,
+            to_char(j.posted_at, 'YYYY-MM') as month_key,
+            COUNT(*) as jobs
+        FROM jobs j
+        LEFT JOIN facilities f ON j.facility_id = f.id
+        WHERE j.posted_at IS NOT NULL
+        AND j.posted_at > NOW() - INTERVAL :months MONTH
+        AND j.is_active = true
+        GROUP BY f.region, to_char(j.posted_at, 'Mon'), to_char(j.posted_at, 'YYYY-MM')
+        ORDER BY month_key, region
+    """), {"months": f"{months} month"}).fetchall()
+
+    # Organize by region
+    regions = {}
+    for r in results:
+        if r.region not in regions:
+            regions[r.region] = []
+        regions[r.region].append({
+            "month": r.month,
+            "monthKey": r.month_key,
+            "jobs": r.jobs
+        })
+
+    return regions
+
+
+@router.get("/nursing-types")
+async def get_nursing_type_trends(db: Session = Depends(get_db)):
+    """Get demand trends by nursing type (RN, LPN, CNA, etc.)"""
+
+    results = db.execute(text("""
+        SELECT
+            nursing_type,
+            COUNT(*) as jobs,
+            ROUND(AVG(
+                CASE
+                    WHEN pay_type = 'hourly' THEN COALESCE(pay_max, pay_min)
+                    WHEN pay_type = 'weekly' THEN COALESCE(pay_max, pay_min) / 40
+                    WHEN pay_type = 'annual' THEN COALESCE(pay_max, pay_min) / 2080
+                    ELSE NULL
+                END
+            )::numeric, 2) as avg_hourly
+        FROM jobs
+        WHERE is_active = true AND nursing_type IS NOT NULL
+        GROUP BY nursing_type
+        ORDER BY jobs DESC
+    """)).fetchall()
+
+    return [
+        {
+            "type": r.nursing_type.upper() if r.nursing_type else "Other",
+            "jobs": r.jobs,
+            "avgHourly": float(r.avg_hourly) if r.avg_hourly else None
+        }
+        for r in results
+    ]
+
+
+@router.get("/facilities/top-hiring")
+async def get_top_hiring_facilities(
+    limit: int = Query(default=10, le=20),
+    db: Session = Depends(get_db)
+):
+    """Get facilities with most active job postings"""
+
+    results = db.execute(text("""
+        SELECT
+            f.id,
+            f.name,
+            f.city,
+            f.region,
+            COUNT(j.id) as active_jobs,
+            fs.ofs_grade as grade,
+            fs.ofs_score as score
+        FROM facilities f
+        JOIN jobs j ON f.id = j.facility_id AND j.is_active = true
+        LEFT JOIN facility_scores fs ON f.id = fs.facility_id
+        GROUP BY f.id, f.name, f.city, f.region, fs.ofs_grade, fs.ofs_score
+        ORDER BY active_jobs DESC
+        LIMIT :limit
+    """), {"limit": limit}).fetchall()
+
+    return [
+        {
+            "id": str(r.id),
+            "name": r.name,
+            "city": r.city or "Virginia",
+            "region": r.region,
+            "activeJobs": r.active_jobs,
+            "grade": r.grade,
+            "score": r.score
+        }
+        for r in results
+    ]
+
+
+@router.get("/daily-postings")
+async def get_daily_postings(
+    days: int = Query(default=30, le=90),
+    db: Session = Depends(get_db)
+):
+    """Get new job postings by day"""
+
+    results = db.execute(text("""
+        SELECT
+            DATE(posted_at) as post_date,
+            to_char(posted_at, 'Dy') as day_name,
+            COUNT(*) as jobs
+        FROM jobs
+        WHERE posted_at IS NOT NULL
+        AND posted_at > NOW() - INTERVAL :days DAY
+        GROUP BY DATE(posted_at), to_char(posted_at, 'Dy')
+        ORDER BY post_date
+    """), {"days": f"{days} day"}).fetchall()
+
+    return [
+        {
+            "date": r.post_date.isoformat(),
+            "dayName": r.day_name,
+            "jobs": r.jobs
+        }
+        for r in results
+    ]
+
+
+@router.get("/job-types")
+async def get_job_type_distribution(db: Session = Depends(get_db)):
+    """Get distribution by employment type (full-time, part-time, PRN, travel)"""
+
+    results = db.execute(text("""
+        SELECT
+            COALESCE(employment_type, 'Not Specified') as employment_type,
+            COUNT(*) as jobs,
+            ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER(), 1) as percentage
+        FROM jobs
+        WHERE is_active = true
+        GROUP BY employment_type
+        ORDER BY jobs DESC
+    """)).fetchall()
+
+    return [
+        {
+            "type": r.employment_type.replace('_', ' ').title() if r.employment_type else "Not Specified",
+            "jobs": r.jobs,
+            "percentage": float(r.percentage) if r.percentage else 0
+        }
+        for r in results
+    ]
+
+
+@router.get("/benefits")
+async def get_benefits_trends(db: Session = Depends(get_db)):
+    """Get most commonly offered benefits"""
+
+    results = db.execute(text("""
+        SELECT
+            benefit,
+            COUNT(*) as job_count,
+            ROUND(100.0 * COUNT(*) / NULLIF((SELECT COUNT(*) FROM jobs WHERE is_active = true AND benefits IS NOT NULL), 0), 1) as percentage
+        FROM jobs, unnest(benefits) as benefit
+        WHERE is_active = true AND benefits IS NOT NULL
+        GROUP BY benefit
+        ORDER BY job_count DESC
+        LIMIT 15
+    """)).fetchall()
+
+    return [
+        {
+            "benefit": r.benefit.replace('_', ' ').title() if r.benefit else "Other",
+            "jobs": r.job_count,
+            "percentage": float(r.percentage) if r.percentage else 0
+        }
+        for r in results
+    ]
+
+
+@router.get("/shifts")
+async def get_shift_availability(db: Session = Depends(get_db)):
+    """Get breakdown by shift type"""
+
+    results = db.execute(text("""
+        SELECT
+            COALESCE(shift_type, 'Not Specified') as shift_type,
+            COUNT(*) as jobs,
+            ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER(), 1) as percentage
+        FROM jobs
+        WHERE is_active = true
+        GROUP BY shift_type
+        ORDER BY jobs DESC
+    """)).fetchall()
+
+    return [
+        {
+            "shift": r.shift_type.replace('_', ' ').title() if r.shift_type else "Not Specified",
+            "jobs": r.jobs,
+            "percentage": float(r.percentage) if r.percentage else 0
+        }
+        for r in results
+    ]
+
+
+@router.get("/experience")
+async def get_experience_requirements(db: Session = Depends(get_db)):
+    """Get experience requirements analysis"""
+
+    results = db.execute(text("""
+        SELECT
+            CASE
+                WHEN years_experience_min IS NULL OR years_experience_min = 0 THEN 'Entry Level (0 years)'
+                WHEN years_experience_min = 1 THEN '1 Year'
+                WHEN years_experience_min = 2 THEN '2 Years'
+                WHEN years_experience_min BETWEEN 3 AND 4 THEN '3-4 Years'
+                ELSE '5+ Years'
+            END as experience_level,
+            COUNT(*) as jobs,
+            ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER(), 1) as percentage
+        FROM jobs
+        WHERE is_active = true
+        GROUP BY
+            CASE
+                WHEN years_experience_min IS NULL OR years_experience_min = 0 THEN 'Entry Level (0 years)'
+                WHEN years_experience_min = 1 THEN '1 Year'
+                WHEN years_experience_min = 2 THEN '2 Years'
+                WHEN years_experience_min BETWEEN 3 AND 4 THEN '3-4 Years'
+                ELSE '5+ Years'
+            END
+        ORDER BY
+            CASE
+                WHEN years_experience_min IS NULL OR years_experience_min = 0 THEN 0
+                WHEN years_experience_min = 1 THEN 1
+                WHEN years_experience_min = 2 THEN 2
+                WHEN years_experience_min BETWEEN 3 AND 4 THEN 3
+                ELSE 5
+            END
+    """)).fetchall()
+
+    return [
+        {
+            "level": r.experience_level,
+            "jobs": r.jobs,
+            "percentage": float(r.percentage) if r.percentage else 0
+        }
+        for r in results
+    ]
+
+
+@router.get("/certifications")
+async def get_certification_requirements(db: Session = Depends(get_db)):
+    """Get most commonly required certifications"""
+
+    results = db.execute(text("""
+        SELECT
+            cert,
+            COUNT(*) as job_count,
+            ROUND(100.0 * COUNT(*) / NULLIF((SELECT COUNT(*) FROM jobs WHERE is_active = true AND certifications_required IS NOT NULL), 0), 1) as percentage
+        FROM jobs, unnest(certifications_required) as cert
+        WHERE is_active = true AND certifications_required IS NOT NULL
+        GROUP BY cert
+        ORDER BY job_count DESC
+        LIMIT 12
+    """)).fetchall()
+
+    return [
+        {
+            "certification": r.cert.upper() if r.cert else "Other",
+            "jobs": r.job_count,
+            "percentage": float(r.percentage) if r.percentage else 0
+        }
+        for r in results
+    ]
+
+
+@router.get("/travel")
+async def get_travel_nurse_trends(db: Session = Depends(get_db)):
+    """Get travel nursing opportunities overview"""
+
+    # Overall travel stats
+    travel_stats = db.execute(text("""
+        SELECT
+            COUNT(*) as total_travel_jobs,
+            ROUND(AVG(weekly_gross_pay)::numeric, 0) as avg_weekly_pay,
+            ROUND(AVG(contract_length_weeks)::numeric, 0) as avg_contract_weeks,
+            ROUND(AVG(stipend_housing)::numeric, 0) as avg_housing_stipend,
+            ROUND(AVG(stipend_meals)::numeric, 0) as avg_meals_stipend
+        FROM jobs
+        WHERE is_active = true
+        AND (nursing_type = 'travel' OR employment_type ILIKE '%travel%')
+    """)).fetchone()
+
+    # Travel jobs by region
+    by_region = db.execute(text("""
+        SELECT
+            COALESCE(f.region, 'Other') as region,
+            COUNT(*) as jobs,
+            ROUND(AVG(j.weekly_gross_pay)::numeric, 0) as avg_weekly
+        FROM jobs j
+        LEFT JOIN facilities f ON j.facility_id = f.id
+        WHERE j.is_active = true
+        AND (j.nursing_type = 'travel' OR j.employment_type ILIKE '%travel%')
+        GROUP BY f.region
+        ORDER BY jobs DESC
+    """)).fetchall()
+
+    return {
+        "stats": {
+            "totalJobs": travel_stats.total_travel_jobs if travel_stats else 0,
+            "avgWeeklyPay": float(travel_stats.avg_weekly_pay) if travel_stats and travel_stats.avg_weekly_pay else None,
+            "avgContractWeeks": int(travel_stats.avg_contract_weeks) if travel_stats and travel_stats.avg_contract_weeks else None,
+            "avgHousingStipend": float(travel_stats.avg_housing_stipend) if travel_stats and travel_stats.avg_housing_stipend else None,
+            "avgMealsStipend": float(travel_stats.avg_meals_stipend) if travel_stats and travel_stats.avg_meals_stipend else None
+        },
+        "byRegion": [
+            {
+                "region": r.region,
+                "jobs": r.jobs,
+                "avgWeekly": float(r.avg_weekly) if r.avg_weekly else None
+            }
+            for r in by_region
+        ]
+    }
+
+
+@router.get("/seasonal")
+async def get_seasonal_patterns(db: Session = Depends(get_db)):
+    """Get hiring patterns by month to identify seasonal trends"""
+
+    results = db.execute(text("""
+        SELECT
+            EXTRACT(MONTH FROM posted_at) as month_num,
+            to_char(posted_at, 'Mon') as month_name,
+            COUNT(*) as jobs,
+            ROUND(AVG(
+                CASE
+                    WHEN pay_type = 'hourly' THEN COALESCE(pay_max, pay_min)
+                    WHEN pay_type = 'weekly' THEN COALESCE(pay_max, pay_min) / 40
+                    WHEN pay_type = 'annual' THEN COALESCE(pay_max, pay_min) / 2080
+                    ELSE NULL
+                END
+            )::numeric, 2) as avg_pay
+        FROM jobs
+        WHERE posted_at IS NOT NULL
+        AND posted_at > NOW() - INTERVAL '12 months'
+        GROUP BY EXTRACT(MONTH FROM posted_at), to_char(posted_at, 'Mon')
+        ORDER BY month_num
+    """)).fetchall()
+
+    # Calculate the average to identify high/low hiring months
+    if results:
+        avg_jobs = sum(r.jobs for r in results) / len(results)
+    else:
+        avg_jobs = 0
+
+    return [
+        {
+            "month": r.month_name,
+            "monthNum": int(r.month_num),
+            "jobs": r.jobs,
+            "avgPay": float(r.avg_pay) if r.avg_pay else None,
+            "intensity": "high" if r.jobs > avg_jobs * 1.2 else ("low" if r.jobs < avg_jobs * 0.8 else "normal")
+        }
+        for r in results
+    ]

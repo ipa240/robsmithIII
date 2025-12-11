@@ -99,6 +99,8 @@ class CurrentUser:
         self.given_name = data.get("given_name", "")
         self.family_name = data.get("family_name", "")
         self.roles = data.get("urn:zitadel:iam:org:project:roles", {})
+        # Database user_id - set by get_current_user_with_db
+        self.user_id: Optional[str] = None
 
     @property
     def is_admin(self) -> bool:
@@ -155,4 +157,38 @@ async def require_admin(current_user: CurrentUser = Depends(get_current_user)) -
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"
         )
+    return current_user
+
+
+async def get_current_user_with_db(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> CurrentUser:
+    """
+    Dependency that gets current user and looks up their database user_id.
+    Use this instead of get_current_user when you need access to the database user ID.
+    """
+    from sqlalchemy import text
+
+    try:
+        # Look up user by email (primary) or oauth_id (fallback)
+        result = db.execute(
+            text("""
+                SELECT id FROM users
+                WHERE email = :email
+                   OR (oauth_provider = 'zitadel' AND oauth_provider_id = :oauth_id)
+                LIMIT 1
+            """),
+            {"email": current_user.email, "oauth_id": current_user.zitadel_id}
+        ).first()
+
+        if result:
+            current_user.user_id = str(result.id)
+        else:
+            # User not found in database - they might need to complete onboarding
+            current_user.user_id = None
+    except Exception as e:
+        print(f"Error looking up database user: {e}")
+        current_user.user_id = None
+
     return current_user

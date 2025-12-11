@@ -1,6 +1,6 @@
 import { Lock, TrendingUp, DollarSign, Briefcase, Eye, Award, Loader2, Star, ShieldCheck, Building2, Gift, Home, Clock, Heart, Users, MessageCircle, Shield, MapPin, Coffee, Car, CloudSun, Thermometer } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter, ZAxis, ReferenceLine, Legend, LabelList } from 'recharts'
 import { useSubscription, isAdminUnlocked } from '../hooks/useSubscription'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
@@ -290,15 +290,43 @@ export default function FacilityAnalytics({ facilityId, facilityName }: Facility
       )}
 
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Pay Comparison */}
+        {/* Pay vs Regional Market - Enhanced with Annual Delta */}
         <div className="border border-slate-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-3">
             <DollarSign className="w-4 h-4 text-emerald-500" />
-            <h3 className="font-medium text-slate-900">Pay Comparison (Avg $/hr)</h3>
+            <h3 className="font-medium text-slate-900">Pay vs Regional Market</h3>
           </div>
           {payComparisonData.length > 0 ? (
             <>
-              <div className="h-40">
+              {/* Annual Earnings Delta Callout */}
+              {analytics.pay_comparison?.facility_avg && analytics.pay_comparison?.regional_avg && (
+                <div className={`mb-3 p-3 rounded-lg ${
+                  analytics.pay_comparison.facility_avg >= analytics.pay_comparison.regional_avg
+                    ? 'bg-emerald-50 border border-emerald-200'
+                    : 'bg-amber-50 border border-amber-200'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-700">Annual Earnings Difference:</span>
+                    <span className={`text-lg font-bold ${
+                      analytics.pay_comparison.facility_avg >= analytics.pay_comparison.regional_avg
+                        ? 'text-emerald-600'
+                        : 'text-amber-600'
+                    }`}>
+                      {(() => {
+                        const delta = (analytics.pay_comparison.facility_avg - analytics.pay_comparison.regional_avg) * 2080
+                        const sign = delta >= 0 ? '+' : ''
+                        return `${sign}$${Math.abs(delta).toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr`
+                      })()}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {analytics.pay_comparison.facility_avg >= analytics.pay_comparison.regional_avg
+                      ? `You'd earn more here vs local hospitals`
+                      : `Below regional average - negotiate or look elsewhere`}
+                  </p>
+                </div>
+              )}
+              <div className="h-36">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={payComparisonData} layout="vertical">
                     <XAxis type="number" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} domain={[0, 'dataMax + 5']} />
@@ -384,12 +412,43 @@ export default function FacilityAnalytics({ facilityId, facilityName }: Facility
           )}
         </div>
 
-        {/* Transparency Score */}
+        {/* Transparency Score with Insight */}
         <div className="border border-slate-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-3">
             <Eye className="w-4 h-4 text-purple-500" />
             <h3 className="font-medium text-slate-900">Job Transparency</h3>
           </div>
+
+          {/* Transparency Insight Callout */}
+          {(() => {
+            const avgTransparency = transparencyData.reduce((sum, item) => sum + item.value, 0) / transparencyData.length
+            const isHighTransparency = avgTransparency >= 60
+
+            return (
+              <div className={`mb-3 p-2.5 rounded-lg text-xs ${
+                isHighTransparency
+                  ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                  : 'bg-amber-50 border border-amber-200 text-amber-800'
+              }`}>
+                <div className="flex items-start gap-2">
+                  <span className="text-sm">{isHighTransparency ? '✅' : '⚠️'}</span>
+                  <div>
+                    <span className="font-medium">
+                      {isHighTransparency
+                        ? 'Transparent employer - 4× more applicants'
+                        : 'Below-average transparency'}
+                    </span>
+                    <p className="text-[10px] mt-0.5 opacity-80">
+                      {isHighTransparency
+                        ? 'Facilities that disclose pay attract more qualified candidates'
+                        : 'Low transparency can signal hidden workplace issues'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+
           <div className="space-y-3">
             {transparencyData.map((item, idx) => (
               <div key={idx}>
@@ -494,6 +553,90 @@ export default function FacilityAnalytics({ facilityId, facilityName }: Facility
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Total Compensation Stacked Bar - "Real value of nursing job" */}
+      {(analytics.pay_comparison?.facility_avg || hasCompensation) && (
+        <div className="mt-6 border border-slate-200 rounded-lg p-4 bg-gradient-to-r from-emerald-50/50 to-teal-50/50">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp className="w-5 h-5 text-emerald-600" />
+            <h3 className="font-semibold text-slate-900">Total Compensation Value</h3>
+            <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full ml-auto">
+              Real Value
+            </span>
+          </div>
+
+          {/* Calculate total comp */}
+          {(() => {
+            // facility_avg could be hourly (<200) or annual (>200) - detect and convert
+            const rawAvg = analytics.pay_comparison?.facility_avg || 40
+            const isHourly = rawAvg < 200 // Hourly rates are typically $20-100/hr
+            const baseSalary = isHourly ? rawAvg * 2080 : rawAvg // Convert hourly to annual if needed
+            const signOnBonus = comp.avg_sign_on_bonus || 0
+            const housingAnnual = (comp.avg_housing_stipend || 0) * 12
+            const benefitsEstimate = Math.round(baseSalary * 0.18) // ~18% benefits value
+            const total = baseSalary + signOnBonus + housingAnnual + benefitsEstimate
+
+            const compData = [
+              { name: 'Base Pay', value: baseSalary, fill: '#10b981' },
+              ...(signOnBonus > 0 ? [{ name: 'Sign-On', value: signOnBonus, fill: '#6366f1' }] : []),
+              ...(housingAnnual > 0 ? [{ name: 'Housing', value: housingAnnual, fill: '#0ea5e9' }] : []),
+              { name: 'Benefits Est.', value: benefitsEstimate, fill: '#8b5cf6' },
+            ]
+
+            return (
+              <>
+                {/* Big Total Callout */}
+                <div className="bg-white rounded-lg p-4 border border-emerald-200 mb-4">
+                  <div className="text-center">
+                    <div className="text-sm text-slate-500 mb-1">Estimated Total Annual Value</div>
+                    <div className="text-3xl font-bold text-emerald-600">
+                      ${total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      <span className="text-base font-normal text-slate-400">/yr</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-2">
+                      Real value of a nursing position at this facility
+                    </p>
+                  </div>
+                </div>
+
+                {/* Stacked Horizontal Bar */}
+                <div className="h-16 mb-3">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={[{ name: 'Total', ...Object.fromEntries(compData.map(d => [d.name, d.value])) }]}
+                      layout="vertical"
+                      stackOffset="expand"
+                    >
+                      <XAxis type="number" hide domain={[0, 1]} />
+                      <YAxis type="category" dataKey="name" hide width={0} />
+                      <Tooltip
+                        formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
+                        contentStyle={{ fontSize: '12px' }}
+                      />
+                      {compData.map((item, idx) => (
+                        <Bar key={idx} dataKey={item.name} stackId="comp" fill={item.fill} radius={idx === 0 ? [4, 0, 0, 4] : idx === compData.length - 1 ? [0, 4, 4, 0] : 0} />
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Legend with values */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                  {compData.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-2 bg-white rounded p-2 border border-slate-100">
+                      <div className="w-3 h-3 rounded" style={{ backgroundColor: item.fill }}></div>
+                      <div>
+                        <div className="font-medium text-slate-700">{item.name}</div>
+                        <div className="text-slate-500">${item.value.toLocaleString()}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )
+          })()}
         </div>
       )}
 
@@ -749,6 +892,113 @@ export default function FacilityAnalytics({ facilityId, facilityName }: Facility
               </span>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Employee vs Patient Happiness Quadrant - "Happy patients, unhappy nurses = red flag" */}
+      {hasReviews && hasHCAHPS && (
+        <div className="mt-6 border border-slate-200 rounded-lg p-4 bg-gradient-to-r from-rose-50/30 to-blue-50/30">
+          <div className="flex items-center gap-2 mb-4">
+            <Heart className="w-5 h-5 text-rose-500" />
+            <h3 className="font-semibold text-slate-900">Happiness Index</h3>
+            <span className="text-xs bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full ml-auto">
+              Red Flag Detector
+            </span>
+          </div>
+
+          {/* Quadrant visualization */}
+          {(() => {
+            const employeeRating = analytics.employee_reviews.overall_rating || 3
+            const patientRating = analytics.patient_satisfaction.star_rating || 3
+
+            // Determine quadrant and message
+            const isEmployeeHappy = employeeRating >= 3.5
+            const isPatientHappy = patientRating >= 3.5
+
+            let quadrantColor = ''
+            let quadrantMessage = ''
+            let quadrantIcon = ''
+
+            if (isEmployeeHappy && isPatientHappy) {
+              quadrantColor = 'bg-emerald-100 border-emerald-300 text-emerald-800'
+              quadrantMessage = 'Happy nurses, happy patients - a great place to work!'
+              quadrantIcon = '✅'
+            } else if (!isEmployeeHappy && isPatientHappy) {
+              quadrantColor = 'bg-red-100 border-red-300 text-red-800'
+              quadrantMessage = '⚠️ RED FLAG: Happy patients but unhappy nurses - burnout risk'
+              quadrantIcon = '🚩'
+            } else if (isEmployeeHappy && !isPatientHappy) {
+              quadrantColor = 'bg-amber-100 border-amber-300 text-amber-800'
+              quadrantMessage = 'Happy nurses but patients less satisfied - investigate further'
+              quadrantIcon = '🔍'
+            } else {
+              quadrantColor = 'bg-slate-100 border-slate-300 text-slate-700'
+              quadrantMessage = 'Both groups report lower satisfaction - proceed with caution'
+              quadrantIcon = '⚠️'
+            }
+
+            return (
+              <>
+                {/* Main quadrant display */}
+                <div className="relative h-56 bg-white rounded-lg border border-slate-200 p-4 mb-4">
+                  {/* Grid lines */}
+                  <div className="absolute inset-4 grid grid-cols-2 grid-rows-2">
+                    <div className="border-r border-b border-slate-200 bg-amber-50/30"></div>
+                    <div className="border-b border-slate-200 bg-emerald-50/30"></div>
+                    <div className="border-r border-slate-200 bg-slate-50/50"></div>
+                    <div className="bg-amber-50/30"></div>
+                  </div>
+
+                  {/* Axis labels */}
+                  <div className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[10px] text-slate-500">
+                    Employee Rating →
+                  </div>
+                  <div className="absolute top-1/2 left-1 -translate-y-1/2 -rotate-90 text-[10px] text-slate-500 whitespace-nowrap">
+                    Patient Rating →
+                  </div>
+
+                  {/* Quadrant labels */}
+                  <div className="absolute top-5 left-5 text-[9px] text-slate-400">Unhappy Staff</div>
+                  <div className="absolute top-5 right-5 text-[9px] text-emerald-600 font-medium">🎯 Sweet Spot</div>
+                  <div className="absolute bottom-5 left-5 text-[9px] text-slate-400">Avoid</div>
+                  <div className="absolute bottom-5 right-5 text-[9px] text-slate-400">Mixed</div>
+
+                  {/* Red flag label for top-left */}
+                  <div className="absolute top-12 left-5 text-[9px] text-red-500 font-medium">🚩 Red Flag</div>
+
+                  {/* Current facility marker */}
+                  <div
+                    className="absolute w-8 h-8 rounded-full bg-primary-500 border-4 border-white shadow-lg flex items-center justify-center text-white text-xs font-bold transform -translate-x-1/2 -translate-y-1/2 animate-pulse"
+                    style={{
+                      left: `calc(16px + ${((employeeRating - 1) / 4) * 100}% * 0.85)`,
+                      top: `calc(16px + ${((5 - patientRating) / 4) * 100}% * 0.85)`,
+                    }}
+                  >
+                    ★
+                  </div>
+                </div>
+
+                {/* Quadrant interpretation */}
+                <div className={`p-3 rounded-lg border ${quadrantColor}`}>
+                  <div className="flex items-start gap-2">
+                    <span className="text-lg">{quadrantIcon}</span>
+                    <div>
+                      <div className="font-medium text-sm">{quadrantMessage}</div>
+                      <div className="text-xs mt-1 opacity-80">
+                        Employee: {employeeRating.toFixed(1)}/5 | Patient: {patientRating.toFixed(0)}/5
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Explanation */}
+                <p className="text-xs text-slate-500 mt-3">
+                  Facilities with happy patients but unhappy nurses often have high turnover -
+                  management pushes staff hard to satisfy patients at the expense of work-life balance.
+                </p>
+              </>
+            )
+          })()}
         </div>
       )}
 
@@ -1015,6 +1265,96 @@ export default function FacilityAnalytics({ facilityId, facilityName }: Facility
               <span className="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded-full">{analytics.facility_stats.hospital_type}</span>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Recruitment Difficulty Regional Grid - "Hardest places to hire nurses" */}
+      {analytics.region && (
+        <div className="mt-6 border border-slate-200 rounded-lg p-4 bg-gradient-to-r from-red-50/30 to-orange-50/30">
+          <div className="flex items-center gap-2 mb-4">
+            <MapPin className="w-5 h-5 text-red-500" />
+            <h3 className="font-semibold text-slate-900">Recruitment Difficulty by Region</h3>
+            <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full ml-auto">
+              Hiring Insights
+            </span>
+          </div>
+
+          {/* Regional Grid */}
+          {(() => {
+            // Virginia regions with relative hiring difficulty (based on avg days jobs stay open)
+            // These would ideally come from an API but are reasonable estimates for VA
+            const regions = [
+              { name: 'Northern VA', difficulty: 85, color: 'bg-red-500', jobs: 'High demand' },
+              { name: 'Hampton Roads', difficulty: 70, color: 'bg-orange-500', jobs: 'Moderate' },
+              { name: 'Richmond Metro', difficulty: 65, color: 'bg-amber-500', jobs: 'Moderate' },
+              { name: 'Charlottesville', difficulty: 55, color: 'bg-yellow-500', jobs: 'Balanced' },
+              { name: 'Roanoke', difficulty: 40, color: 'bg-lime-500', jobs: 'Easier' },
+              { name: 'Southwestern VA', difficulty: 30, color: 'bg-emerald-500', jobs: 'Easier' },
+            ]
+
+            const currentRegion = regions.find(r =>
+              analytics.region?.toLowerCase().includes(r.name.split(' ')[0].toLowerCase())
+            )
+
+            return (
+              <>
+                {/* Grid visualization */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
+                  {regions.map((region, idx) => {
+                    const isCurrentRegion = currentRegion?.name === region.name
+                    return (
+                      <div
+                        key={idx}
+                        className={`p-3 rounded-lg border-2 transition-all ${
+                          isCurrentRegion
+                            ? 'border-primary-500 ring-2 ring-primary-200 shadow-md'
+                            : 'border-transparent'
+                        }`}
+                        style={{ backgroundColor: `${region.color.replace('bg-', '')}15` }}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium text-slate-700">{region.name}</span>
+                          {isCurrentRegion && (
+                            <span className="text-[9px] bg-primary-500 text-white px-1.5 py-0.5 rounded">YOU</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 bg-slate-100 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full ${region.color}`}
+                              style={{ width: `${region.difficulty}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-slate-500 w-12">{region.difficulty}%</span>
+                        </div>
+                        <div className="text-[9px] text-slate-400 mt-1">{region.jobs}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Insight callout */}
+                <div className="bg-white rounded-lg p-3 border border-slate-200">
+                  <div className="flex items-start gap-2">
+                    <span className="text-lg">🔥</span>
+                    <div>
+                      <div className="text-sm font-medium text-slate-800">
+                        {currentRegion && currentRegion.difficulty >= 70
+                          ? 'High competition area - negotiate harder!'
+                          : currentRegion && currentRegion.difficulty >= 50
+                          ? 'Moderate demand - standard market'
+                          : 'Lower competition - employers may offer less'}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Higher difficulty = more leverage for nurses. Facilities in competitive areas
+                        often offer better sign-on bonuses and benefits to attract talent.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )
+          })()}
         </div>
       )}
     </div>

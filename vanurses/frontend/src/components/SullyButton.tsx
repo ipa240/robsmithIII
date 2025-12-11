@@ -37,7 +37,7 @@ export default function SullyButton() {
 
       {/* Login Prompt Popup for non-authenticated users */}
       {showLoginPrompt && !hasAccess && (
-        <div className="fixed bottom-24 right-6 w-72 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+        <div className="fixed bottom-28 right-6 w-72 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
           <div className="bg-gradient-to-r from-primary-600 to-accent-600 p-4 text-white">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full ring-2 ring-white/50 overflow-hidden">
@@ -71,13 +71,13 @@ export default function SullyButton() {
         </div>
       )}
 
-      {/* Floating Button */}
+      {/* Floating Button - positioned to avoid overlapping pagination/action buttons */}
       <button
         onClick={handleClick}
-        className={`fixed bottom-6 right-6 w-16 h-16 rounded-full shadow-lg flex items-center justify-center transition-all z-50 overflow-hidden ${
+        className={`fixed bottom-8 right-6 w-16 h-16 rounded-full shadow-lg flex items-center justify-center transition-all z-50 overflow-hidden ${
           isOpen || showLoginPrompt
-            ? 'bg-slate-700'
-            : 'hover:scale-110 hover:shadow-xl ring-2 ring-white ring-offset-2'
+            ? 'bg-purple-600'
+            : 'bg-purple-600 hover:scale-110 hover:shadow-xl ring-2 ring-white ring-offset-2'
         }`}
         title="Chat with Sully"
       >

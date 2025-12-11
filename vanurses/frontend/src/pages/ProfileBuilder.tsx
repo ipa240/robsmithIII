@@ -67,6 +67,12 @@ export default function ProfileBuilder() {
   const queryClient = useQueryClient()
   const auth = useAuth()
   const [editingSection, setEditingSection] = useState<string | null>(null)
+
+  // Redirect to login if not authenticated
+  if (!auth.isAuthenticated && !auth.isLoading) {
+    auth.signinRedirect()
+    return null
+  }
   const [newWorkEntry, setNewWorkEntry] = useState<Partial<WorkHistory> | null>(null)
   const [newEducation, setNewEducation] = useState<Partial<Education> | null>(null)
 

@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from 'react-oidc-context'
 import { useSubscription } from '../hooks/useSubscription'
@@ -186,6 +187,11 @@ export default function Scoring() {
   const auth = useAuth()
   const { isPaid } = useSubscription()
   const showUpgradePrompt = !auth.isAuthenticated || !isPaid
+
+  // Scroll to top when page loads
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
 
   return (
     <div className="space-y-12">
