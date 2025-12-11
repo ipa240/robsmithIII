@@ -325,6 +325,26 @@ async def get_systems(db: Session = Depends(get_db)):
     return {"success": True, "data": systems}
 
 
+@router.get("/stats")
+async def get_facility_stats(db: Session = Depends(get_db)):
+    """Get facility statistics including total count and scored count"""
+    result = db.execute(text("""
+        SELECT
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE fs.ofs_score IS NOT NULL) as scored_count
+        FROM facilities f
+        LEFT JOIN facility_scores fs ON f.id = fs.facility_id
+    """)).first()
+
+    return {
+        "success": True,
+        "data": {
+            "total": result.total,
+            "scored_count": result.scored_count
+        }
+    }
+
+
 @router.get("/names")
 async def get_facility_names(db: Session = Depends(get_db)):
     """Get list of all facility names with IDs for dropdown filters"""

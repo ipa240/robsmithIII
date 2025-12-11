@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuth } from 'react-oidc-context'
-import { Search, MapPin, Clock, DollarSign, Building2, ChevronLeft, ChevronRight, ChevronUp, SlidersHorizontal, X, Gift, Truck, Award, Calendar, Lock, Crown, RefreshCw, Sparkles, Heart, TrendingUp, Eye, Baby, Loader2, GraduationCap } from 'lucide-react'
+import { Search, MapPin, Clock, DollarSign, Building2, ChevronLeft, ChevronRight, ChevronUp, SlidersHorizontal, X, Gift, Truck, Award, Calendar, Lock, Crown, RefreshCw, Sparkles, Heart, TrendingUp, Eye, Baby, Loader2, GraduationCap, User, Zap } from 'lucide-react'
 import { api } from '../api/client'
 import { toTitleCase } from '../utils/format'
 import { useSubscription, isAdminUnlocked } from '../hooks/useSubscription'
@@ -92,6 +92,10 @@ export default function Jobs() {
   const { isPaid, isFacilities, canAccessJobs } = useSubscription()
   // Paid users OR admin unlocked can see all grades
   const isPaidUser = (auth.isAuthenticated && isPaid) || isAdminUnlocked()
+
+  // Tab state: 'all' for regular jobs, 'matched' for personalized matches
+  const [activeTab, setActiveTab] = useState<'all' | 'matched'>('all')
+
   const [search, setSearch] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState({
@@ -114,6 +118,7 @@ export default function Jobs() {
     new_grad_friendly: false,
     bsn_required: '',  // 'yes', 'no', or ''
     certification: '',  // 'ACLS', 'BLS', 'PALS', etc.
+    exclude_nursing_homes: true,  // Default to excluding nursing homes
   })
 
   // Distance/location state
@@ -166,6 +171,24 @@ export default function Jobs() {
     enabled: auth.isAuthenticated
   })
 
+  // Check if user has set preferences for matching
+  const hasPreferences = !!(userPrefs?.specialties?.length || userPrefs?.employment_types?.length)
+
+  // Fetch matched jobs (personalized) - only when tab is active and user is paid
+  const { data: matchedJobsData, isLoading: isLoadingMatched } = useQuery({
+    queryKey: ['matched-jobs', userPrefs?.specialties, userPrefs?.employment_types],
+    queryFn: () => api.get('/api/jobs/matched', {
+      params: {
+        specialties: userPrefs?.specialties?.join(',') || undefined,
+        employment_types: userPrefs?.employment_types?.join(',') || undefined,
+        limit: 50
+      }
+    }).then(res => res.data),
+    enabled: auth.isAuthenticated && isPaidUser && activeTab === 'matched' && hasPreferences
+  })
+
+  const matchedJobs = matchedJobsData?.data || []
+
   const { data: filterOptions } = useQuery({
     queryKey: ['filters'],
     queryFn: () => api.get('/api/filters').then(res => res.data.data)
@@ -206,6 +229,7 @@ export default function Jobs() {
       new_grad_friendly: false,
       bsn_required: '',
       certification: '',
+      exclude_nursing_homes: true,  // Keep default to exclude nursing homes
     })
     setSearch('')
     setDistanceMode('none')
@@ -245,6 +269,8 @@ export default function Jobs() {
         new_grad_friendly: filters.new_grad_friendly || undefined,
         bsn_required: filters.bsn_required || undefined,
         certification: filters.certification || undefined,
+        // Exclude nursing homes
+        exclude_nursing_homes: filters.exclude_nursing_homes || undefined,
         // Location-based sorting
         user_zip: locationZip || undefined,
         sort_by_distance: distanceMode !== 'none' && locationZip ? true : undefined,
@@ -328,7 +354,10 @@ export default function Jobs() {
         <div>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">Nursing Jobs</h1>
           <p className="text-slate-600">
-            {total.toLocaleString()} jobs available across Virginia
+            {activeTab === 'all'
+              ? `${total.toLocaleString()} jobs available across Virginia`
+              : `${matchedJobs.length} jobs matched to your profile`
+            }
           </p>
         </div>
         {/* Live Indicator */}
@@ -346,6 +375,39 @@ export default function Jobs() {
             <span>Updating jobs</span>
           </div>
         </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+            activeTab === 'all'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Search className="w-4 h-4" />
+          All Jobs
+        </button>
+        <button
+          onClick={() => {
+            if (!auth.isAuthenticated) {
+              auth.signinRedirect()
+              return
+            }
+            setActiveTab('matched')
+          }}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+            activeTab === 'matched'
+              ? 'bg-gradient-to-r from-primary-600 to-accent-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Zap className="w-4 h-4" />
+          For You
+          {!isPaidUser && <Lock className="w-3 h-3 text-amber-500" />}
+        </button>
       </div>
 
       {/* Facilities-only User Banner */}
@@ -404,7 +466,8 @@ export default function Jobs() {
         </div>
       )}
 
-      {/* Search and Filters */}
+      {/* Search and Filters - only show on "all" tab */}
+      {activeTab === 'all' && (
       <div className="bg-white rounded-xl border border-slate-200 p-4">
         <div className="flex flex-col gap-4">
           {/* Search row */}
@@ -734,6 +797,17 @@ export default function Jobs() {
                   <GraduationCap className="w-4 h-4 text-purple-500" />
                   <span className="text-sm text-slate-700">New grad friendly</span>
                 </label>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={filters.exclude_nursing_homes}
+                    onChange={(e) => { setFilters(f => ({ ...f, exclude_nursing_homes: e.target.checked })); setCurrentPage(1) }}
+                    className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <Building2 className="w-4 h-4 text-slate-500" />
+                  <span className="text-sm text-slate-700">Exclude Nursing Homes</span>
+                </label>
               </div>
 
               {/* Row 5: Education & Certification Filters */}
@@ -930,9 +1004,162 @@ export default function Jobs() {
           )}
         </div>
       </div>
+      )}
 
-      {/* Results */}
-      {isLoading ? (
+      {/* For You Tab Content */}
+      {activeTab === 'matched' && (
+        <>
+          {/* Upgrade prompt for non-paid users */}
+          {!isPaidUser ? (
+            <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+              <div className="max-w-md mx-auto">
+                <div className="w-16 h-16 bg-gradient-to-br from-primary-100 to-accent-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Zap className="w-8 h-8 text-primary-600" />
+                </div>
+                <h2 className="text-2xl font-bold text-slate-900 mb-2">Personalized Job Matches</h2>
+                <p className="text-slate-600 mb-6">
+                  Upgrade to see jobs matched specifically to your nursing specialty, certifications, and preferences.
+                </p>
+                <Link
+                  to="/billing"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary-600 to-accent-600 text-white rounded-lg font-semibold hover:from-primary-700 hover:to-accent-700 transition-all shadow-lg hover:shadow-xl"
+                >
+                  <Crown className="w-5 h-5" />
+                  Upgrade to Starter - $9/mo
+                </Link>
+              </div>
+            </div>
+          ) : !hasPreferences ? (
+            /* No preferences set - prompt to set them */
+            <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+              <div className="max-w-md mx-auto">
+                <div className="w-16 h-16 bg-gradient-to-br from-amber-100 to-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <User className="w-8 h-8 text-amber-600" />
+                </div>
+                <h2 className="text-2xl font-bold text-slate-900 mb-2">Complete Your Profile</h2>
+                <p className="text-slate-600 mb-6">
+                  Tell us about your nursing specialty and job preferences to see personalized job matches.
+                </p>
+                <Link
+                  to="/profile"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg font-semibold hover:from-amber-600 hover:to-orange-600 transition-all shadow-lg hover:shadow-xl"
+                >
+                  <User className="w-5 h-5" />
+                  Set Your Preferences
+                </Link>
+              </div>
+            </div>
+          ) : isLoadingMatched ? (
+            /* Loading state */
+            <div className="flex items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-10 w-10 border-4 border-primary-500 border-t-transparent"></div>
+            </div>
+          ) : matchedJobs.length === 0 ? (
+            /* No matches found */
+            <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+              <p className="text-slate-500">No jobs found matching your preferences. Try updating your profile settings.</p>
+            </div>
+          ) : (
+            /* Matched jobs list */
+            <div className="space-y-4">
+              <div className="bg-gradient-to-r from-primary-50 to-accent-50 rounded-xl p-4 border border-primary-100">
+                <div className="flex items-center gap-3">
+                  <Zap className="w-5 h-5 text-primary-600" />
+                  <div>
+                    <span className="font-medium text-primary-900">Matched based on:</span>
+                    <span className="text-primary-700 ml-2">
+                      {userPrefs?.specialties?.map((s: string) => formatSpecialty(s)).join(', ')}
+                      {userPrefs?.employment_types?.length > 0 && userPrefs?.specialties?.length > 0 && ' • '}
+                      {userPrefs?.employment_types?.map((e: string) => formatEmploymentType(e)).join(', ')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              {matchedJobs.map((job: any) => (
+                <div
+                  key={job.id}
+                  className="bg-white rounded-xl border border-slate-200 p-6 hover:border-primary-300 hover:shadow-md transition-all cursor-pointer"
+                  onClick={() => { setSelectedJob(job); setDrawerOpen(true); }}
+                >
+                  <div className="flex flex-col lg:flex-row lg:items-start gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-start gap-3 mb-2">
+                        <h3 className="text-lg font-semibold text-primary-600 flex-1 hover:text-primary-700 hover:underline transition-colors cursor-pointer">
+                          {toTitleCase(job.title)}
+                        </h3>
+                        {job.facility_ofs_grade && (
+                          <div className="flex flex-col items-center" title="Facility Score">
+                            <span className="text-[8px] text-slate-400 uppercase tracking-wider leading-tight">Score</span>
+                            <span className={`px-2 py-1 text-xs font-bold rounded ${getGradeColor(job.facility_ofs_grade[0])}`}>
+                              {job.facility_ofs_grade}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      {job.facility_name && (
+                        <Link
+                          to={`/facilities/${job.facility_id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-2 text-primary-600 hover:text-primary-700 hover:underline mb-3"
+                        >
+                          <Building2 className="w-4 h-4" />
+                          <span className="font-medium">{toTitleCase(job.facility_name)}</span>
+                        </Link>
+                      )}
+                      <div className="flex flex-wrap gap-4 text-sm text-slate-600">
+                        {(job.facility_city || job.city) && (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-4 h-4" />
+                            {job.facility_city || job.city}, {job.state}
+                          </span>
+                        )}
+                        {job.shift_type && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-4 h-4" />
+                            {job.shift_type}
+                          </span>
+                        )}
+                        {(job.pay_min || job.pay_max) && (
+                          <span className="flex items-center gap-1">
+                            <DollarSign className="w-4 h-4" />
+                            {job.pay_min && job.pay_max
+                              ? `$${job.pay_min.toLocaleString()} - $${job.pay_max.toLocaleString()}`
+                              : job.pay_min
+                                ? `From $${job.pay_min.toLocaleString()}`
+                                : `Up to $${job.pay_max.toLocaleString()}`
+                            }
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {job.nursing_type && (
+                        <span className="px-3 py-1 bg-primary-50 text-primary-700 text-sm rounded-full">
+                          {formatNursingType(job.nursing_type)}
+                        </span>
+                      )}
+                      {job.specialty && (
+                        <span className="px-3 py-1 bg-slate-100 text-slate-700 text-sm rounded-full">
+                          {formatSpecialty(job.specialty)}
+                        </span>
+                      )}
+                      {job.employment_type && (
+                        <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-sm rounded-full">
+                          {formatEmploymentType(job.employment_type)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Results - All Jobs Tab */}
+      {activeTab === 'all' && (
+      isLoading ? (
         <div className="flex items-center justify-center py-20">
           <div className="animate-spin rounded-full h-10 w-10 border-4 border-primary-500 border-t-transparent"></div>
         </div>
@@ -1149,6 +1376,7 @@ export default function Jobs() {
             )}
           </div>
         </div>
+      )
       )}
 
       {/* Job Preview Drawer */}

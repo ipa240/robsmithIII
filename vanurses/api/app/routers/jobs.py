@@ -57,6 +57,8 @@ async def list_jobs(
     new_grad_friendly: Optional[bool] = None,
     bsn_required: Optional[str] = None,  # "yes", "no", or "any"
     certification: Optional[str] = None,  # e.g., "ACLS", "BLS", "PALS"
+    # Exclude nursing homes filter
+    exclude_nursing_homes: Optional[bool] = None,
 ):
     """Get paginated list of jobs with filters"""
 
@@ -189,6 +191,10 @@ async def list_jobs(
         where_clauses.append("""
             j.raw_schema_json->'parsed'->>'certifications' ~* :cert_filter
         """)
+
+    # Exclude nursing homes filter - filters by facility_type
+    if exclude_nursing_homes:
+        where_clauses.append("(f.facility_type IS NULL OR f.facility_type != 'nursing_home')")
 
     # Distance filter - use Haversine formula (miles)
     # If user_zip is provided, look up coordinates from zip_codes table

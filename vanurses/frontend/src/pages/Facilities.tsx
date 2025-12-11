@@ -45,7 +45,7 @@ export default function Facilities() {
   const [system, setSystem] = useState('')
   const [facilityId, setFacilityId] = useState('')
   const [minGrade, setMinGrade] = useState('')
-  const [excludeNursingHomes, setExcludeNursingHomes] = useState(false)
+  const [excludeNursingHomes, setExcludeNursingHomes] = useState(true)
   const [showFilters, setShowFilters] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const limit = 20
@@ -76,6 +76,12 @@ export default function Facilities() {
   const { data: facilityNames } = useQuery({
     queryKey: ['facility-names'],
     queryFn: () => api.get('/api/facilities/names').then(res => res.data.data)
+  })
+
+  // Get actual total scored facilities from DB (not scroll-based)
+  const { data: facilityStats } = useQuery({
+    queryKey: ['facility-stats'],
+    queryFn: () => api.get('/api/facilities/stats').then(res => res.data.data)
   })
 
   // Fetch user preferences to get their location_zip
@@ -231,7 +237,7 @@ export default function Facilities() {
         <div>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">Facility Rankings</h1>
           <p className="text-slate-600">
-            {total} healthcare facilities rated with our 13-index OFS scoring system
+            {facilityStats?.scored_count || '...'} healthcare facilities rated with our 13-index OFS scoring system
           </p>
         </div>
         {/* Live Indicator */}

@@ -96,8 +96,13 @@ export default function Community() {
     mutationFn: (data: typeof newPost) => api.post('/api/community/posts', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['community-posts'] })
+      queryClient.invalidateQueries({ queryKey: ['community-categories'] })
       setShowNewPost(false)
       setNewPost({ title: '', content: '', is_anonymous: false, category_id: '' })
+    },
+    onError: (error: any) => {
+      console.error('Post creation error:', error)
+      alert(error.response?.data?.detail || 'Failed to create post. Please try again.')
     }
   })
 
@@ -293,7 +298,17 @@ export default function Community() {
           <p className="text-slate-600">Connect with nurses across Virginia</p>
         </div>
         <button
-          onClick={() => setShowNewPost(true)}
+          onClick={() => {
+            // Pre-fill category if one is selected
+            const selectedCat = categories.find(c => c.slug === selectedCategory)
+            setNewPost({
+              title: '',
+              content: '',
+              is_anonymous: false,
+              category_id: selectedCat?.id || ''
+            })
+            setShowNewPost(true)
+          }}
           className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
         >
           <Plus className="w-4 h-4" />
@@ -725,15 +740,23 @@ export default function Community() {
                 <button
                   onClick={() => setShowNewPost(false)}
                   className="flex-1 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50"
+                  disabled={createPost.isPending}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => createPost.mutate(newPost)}
-                  disabled={!newPost.title.trim() || !newPost.category_id}
-                  className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                  disabled={!newPost.title.trim() || !newPost.category_id || createPost.isPending}
+                  className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  Post
+                  {createPost.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Posting...
+                    </>
+                  ) : (
+                    'Post'
+                  )}
                 </button>
               </div>
             </div>

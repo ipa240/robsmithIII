@@ -23,6 +23,7 @@ interface Facility {
   job_count: number
   health_system: string
   beds: number
+  facility_type: string
 }
 
 // Virginia regions with approximate centers
@@ -85,6 +86,7 @@ export default function Map() {
   const [filters, setFilters] = useState({
     minGrade: 'F',
     region: 'all',
+    excludeNursingHomes: true,
   })
   const [showFilters, setShowFilters] = useState(false)
   const [mapCenter, setMapCenter] = useState<[number, number]>(VA_CENTER)
@@ -114,6 +116,7 @@ export default function Map() {
       job_count: f.job_count || 0,
       health_system: f.system_name || f.health_system || '',
       beds: f.bed_count || f.beds || 0,
+      facility_type: f.facility_type || '',
     }))
   }, [facilitiesData])
 
@@ -122,6 +125,8 @@ export default function Map() {
     return facilities.filter(f => {
       // Must have valid coordinates
       if (!f.latitude || !f.longitude) return false
+      // Exclude nursing homes if filter is on
+      if (filters.excludeNursingHomes && f.facility_type === 'nursing_home') return false
       const gradeOrder = ['F', 'D-', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+']
       if (gradeOrder.indexOf(f.ofs_grade) < gradeOrder.indexOf(filters.minGrade)) return false
       return true
@@ -186,6 +191,17 @@ export default function Map() {
                   <span>Upgrade to filter by grade</span>
                 </Link>
               )}
+            </div>
+            <div className="flex items-center">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filters.excludeNursingHomes}
+                  onChange={e => setFilters(f => ({ ...f, excludeNursingHomes: e.target.checked }))}
+                  className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="text-sm text-slate-700">Exclude Nursing Homes</span>
+              </label>
             </div>
           </div>
         </div>
