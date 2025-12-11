@@ -170,12 +170,12 @@ def main():
 
             # Insert/update facility_crime_data
             cursor.execute("""
-                INSERT INTO facility_crime_data (facility_id, lssi_score, lssi_grade, updated_at)
+                INSERT INTO facility_crime_data (facility_id, lssi_score, lssi_grade, created_at)
                 VALUES (%s, %s, %s, NOW())
                 ON CONFLICT (facility_id) DO UPDATE SET
                     lssi_score = EXCLUDED.lssi_score,
                     lssi_grade = EXCLUDED.lssi_grade,
-                    updated_at = NOW()
+                    created_at = NOW()
             """, (nh_id, lssi_score, get_grade(lssi_score)))
 
             # Insert/update facility_commute_data
@@ -184,17 +184,18 @@ def main():
                 VALUES (%s, %s, %s, NOW())
                 ON CONFLICT (facility_id) DO UPDATE SET
                     csi_score = EXCLUDED.csi_score,
-                    csi_grade = EXCLUDED.csi_grade
+                    csi_grade = EXCLUDED.csi_grade,
+                    created_at = NOW()
             """, (nh_id, csi_score, get_grade(csi_score)))
 
             # Insert/update facility_weather_data
             cursor.execute("""
-                INSERT INTO facility_weather_data (facility_id, cci_score, cci_grade, updated_at)
+                INSERT INTO facility_weather_data (facility_id, cci_score, cci_grade, created_at)
                 VALUES (%s, %s, %s, NOW())
                 ON CONFLICT (facility_id) DO UPDATE SET
                     cci_score = EXCLUDED.cci_score,
                     cci_grade = EXCLUDED.cci_grade,
-                    updated_at = NOW()
+                    created_at = NOW()
             """, (nh_id, cci_score, get_grade(cci_score)))
 
             # Insert/update facility_pay_data
