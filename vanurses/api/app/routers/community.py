@@ -6,7 +6,8 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from ..database import get_db
-from ..auth.zitadel import get_current_user_optional, get_current_user, CurrentUser
+from ..auth.zitadel import get_current_user_optional, get_current_user, CurrentUser, require_admin
+from ..services.email_alerts import send_email
 import uuid
 
 router = APIRouter(prefix="/api/community", tags=["community"])
@@ -139,6 +140,25 @@ async def suggest_category(
         }
     )
     db.commit()
+
+    # Send email notification to admin
+    try:
+        admin_email = "support@vanurses.net"
+        html_content = f"""
+        <h2>New Community Category Suggestion</h2>
+        <p><strong>Category Name:</strong> {data.name}</p>
+        <p><strong>Description:</strong> {data.description or "No description provided"}</p>
+        <p><strong>Icon:</strong> {data.icon}</p>
+        <p><strong>Suggested by:</strong> {current_user.email}</p>
+        <p><strong>Category ID:</strong> {category_id}</p>
+        <hr>
+        <p>To approve this category, use the admin endpoint:</p>
+        <code>POST /api/community/admin/categories/{category_id}/approve</code>
+        """
+        send_email(admin_email, f"[VANurses] New Category Suggestion: {data.name}", html_content)
+    except Exception as e:
+        # Email failure should not block category creation
+        print(f"Failed to send category notification email: {e}")
 
     return {
         "success": True,
@@ -788,3 +808,90 @@ async def delete_reply(
     db.commit()
 
     return {"success": True, "message": "Reply deleted"}
+
+
+# ========== Admin Endpoints ==========
+
+@router.get("/admin/categories/pending")
+async def list_pending_categories(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin)
+):
+    """List all pending category suggestions (admin only)"""
+    result = db.execute(
+        text("""
+            SELECT c.id, c.name, c.slug, c.description, c.icon, c.created_at, c.created_by,
+                   u.email as suggested_by_email, u.first_name, u.last_name
+            FROM community_categories c
+            LEFT JOIN users u ON c.created_by = u.id
+            WHERE c.is_approved = FALSE
+            ORDER BY c.created_at DESC
+        """)
+    )
+    categories = [dict(row._mapping) for row in result]
+    return {"pending_categories": categories, "count": len(categories)}
+
+
+@router.post("/admin/categories/{category_id}/approve")
+async def approve_category(
+    category_id: str,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin)
+):
+    """Approve a pending category suggestion (admin only)"""
+    # Check if category exists and is pending
+    result = db.execute(
+        text("SELECT id, name, is_approved FROM community_categories WHERE id = :id"),
+        {"id": category_id}
+    ).first()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    if result.is_approved:
+        raise HTTPException(status_code=400, detail="Category is already approved")
+
+    # Get max sort_order to add at the end
+    max_order = db.execute(
+        text("SELECT COALESCE(MAX(sort_order), 0) + 1 as next_order FROM community_categories WHERE is_approved = TRUE")
+    ).first()
+
+    # Approve the category
+    db.execute(
+        text("""
+            UPDATE community_categories
+            SET is_approved = TRUE, is_active = TRUE, sort_order = :sort_order
+            WHERE id = :id
+        """),
+        {"id": category_id, "sort_order": max_order.next_order}
+    )
+    db.commit()
+
+    return {
+        "success": True,
+        "message": f"Category '{result.name}' has been approved and is now visible in the community"
+    }
+
+
+@router.delete("/admin/categories/{category_id}")
+async def reject_category(
+    category_id: str,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin)
+):
+    """Reject/delete a pending category suggestion (admin only)"""
+    result = db.execute(
+        text("SELECT id, name, is_approved FROM community_categories WHERE id = :id"),
+        {"id": category_id}
+    ).first()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    if result.is_approved:
+        raise HTTPException(status_code=400, detail="Cannot delete an approved category. Deactivate it instead.")
+
+    db.execute(text("DELETE FROM community_categories WHERE id = :id"), {"id": category_id})
+    db.commit()
+
+    return {"success": True, "message": f"Category '{result.name}' has been rejected and deleted"}

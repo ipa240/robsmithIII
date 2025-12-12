@@ -432,12 +432,12 @@ async def get_saved_jobs(
             SELECT j.id, j.title, j.nursing_type, j.specialty,
                    j.employment_type, j.shift_type, j.city, j.state,
                    j.pay_min, j.pay_max, j.posted_at,
-                   f.name as facility_name, sj.saved_at
+                   f.name as facility_name, sj.created_at as saved_at
             FROM saved_jobs sj
             JOIN jobs j ON sj.job_id = j.id
             LEFT JOIN facilities f ON j.facility_id = f.id
             WHERE sj.user_id = :user_id
-            ORDER BY sj.saved_at DESC
+            ORDER BY sj.created_at DESC
         """),
         {"user_id": user["id"]}
     )
@@ -447,6 +447,15 @@ async def get_saved_jobs(
     return {"success": True, "data": jobs}
 
 
+# Tier limits for saved jobs
+SAVED_JOB_LIMITS = {
+    "free": 1,
+    "facilities": 1,
+    "starter": 10,
+    "pro": 1000,
+    "admin": 1000,
+}
+
 @router.post("/me/saved-jobs/{job_id}")
 async def save_job(
     job_id: str,
@@ -455,6 +464,22 @@ async def save_job(
 ):
     """Save a job"""
     user = get_or_create_user(db, current_user)
+
+    # Check tier limit
+    tier = user.get("tier", "free")
+    limit = SAVED_JOB_LIMITS.get(tier, 1)
+
+    # Count current saved jobs
+    count_result = db.execute(
+        text("SELECT COUNT(*) FROM saved_jobs WHERE user_id = :user_id"),
+        {"user_id": user["id"]}
+    ).scalar()
+
+    if count_result >= limit:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Saved job limit reached ({limit}). Upgrade to save more jobs."
+        )
 
     # Check job exists
     job = db.execute(
@@ -500,6 +525,244 @@ async def unsave_job(
     return {"success": True, "message": "Job removed"}
 
 
+# ============ WATCHED FACILITIES ============
+
+# Tier limits for watched facilities
+WATCHED_FACILITY_LIMITS = {
+    "free": 0,
+    "facilities": 0,
+    "starter": 3,
+    "pro": 5,
+    "premium": 999,
+    "admin": 999,
+    "hr": 999
+}
+
+
+class WatchedFacilityUpdate(BaseModel):
+    notify_email: Optional[bool] = None
+    notification_frequency: Optional[str] = None
+
+
+@router.get("/me/watched-facilities")
+async def get_watched_facilities(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+):
+    """Get user's watched facilities with facility details"""
+    user = get_or_create_user(db, current_user)
+
+    result = db.execute(
+        text("""
+            SELECT wf.id, wf.facility_id, wf.notify_email, wf.notification_frequency,
+                   wf.created_at,
+                   f.name as facility_name, f.city, f.state, f.system_name,
+                   fs.ofs_score, fs.ofs_grade,
+                   (SELECT COUNT(*) FROM jobs j WHERE j.facility_id = f.id AND j.is_active = true) as job_count,
+                   (SELECT COUNT(*) FROM jobs j WHERE j.facility_id = f.id AND j.is_active = true
+                    AND j.posted_at >= NOW() - INTERVAL '7 days') as new_job_count
+            FROM watched_facilities wf
+            JOIN facilities f ON wf.facility_id = f.id
+            LEFT JOIN facility_scores fs ON f.id = fs.facility_id
+            WHERE wf.user_id = :user_id
+            ORDER BY wf.created_at DESC
+        """),
+        {"user_id": user["id"]}
+    )
+
+    facilities = [dict(row._mapping) for row in result]
+
+    # Get user's tier limit
+    tier = user.get("tier", "free") or "free"
+    limit = WATCHED_FACILITY_LIMITS.get(tier, 0)
+
+    return {
+        "success": True,
+        "data": facilities,
+        "limit": limit,
+        "count": len(facilities)
+    }
+
+
+@router.get("/me/watched-facilities/jobs")
+async def get_watched_facility_jobs(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+):
+    """Get recent jobs from watched facilities (last 7 days)"""
+    user = get_or_create_user(db, current_user)
+
+    result = db.execute(
+        text("""
+            SELECT j.id, j.title, j.nursing_type, j.specialty,
+                   j.employment_type, j.shift_type, j.city, j.state,
+                   j.pay_min, j.pay_max, j.posted_at,
+                   f.name as facility_name, f.id as facility_id
+            FROM jobs j
+            JOIN facilities f ON j.facility_id = f.id
+            WHERE j.facility_id IN (
+                SELECT facility_id FROM watched_facilities
+                WHERE user_id = :user_id
+            )
+            AND j.is_active = true
+            AND j.posted_at >= NOW() - INTERVAL '7 days'
+            ORDER BY j.posted_at DESC
+            LIMIT 20
+        """),
+        {"user_id": user["id"]}
+    )
+
+    jobs = [dict(row._mapping) for row in result]
+
+    return {"success": True, "data": jobs}
+
+
+@router.get("/me/watched-facilities/{facility_id}/status")
+async def get_watch_status(
+    facility_id: str,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+):
+    """Check if user is watching a specific facility"""
+    user = get_or_create_user(db, current_user)
+
+    result = db.execute(
+        text("""
+            SELECT id, notify_email, notification_frequency
+            FROM watched_facilities
+            WHERE user_id = :user_id AND facility_id = :facility_id
+        """),
+        {"user_id": user["id"], "facility_id": facility_id}
+    ).first()
+
+    if result:
+        return {
+            "success": True,
+            "is_watching": True,
+            "data": dict(result._mapping)
+        }
+
+    return {"success": True, "is_watching": False}
+
+
+@router.post("/me/watched-facilities/{facility_id}")
+async def watch_facility(
+    facility_id: str,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+):
+    """Watch a facility (requires Starter tier or higher)"""
+    user = get_or_create_user(db, current_user)
+    tier = user.get("tier", "free") or "free"
+    limit = WATCHED_FACILITY_LIMITS.get(tier, 0)
+
+    # Check tier permission
+    if limit == 0:
+        raise HTTPException(
+            status_code=403,
+            detail="Watching facilities requires a Starter subscription or higher"
+        )
+
+    # Check current count
+    current_count = db.execute(
+        text("SELECT COUNT(*) FROM watched_facilities WHERE user_id = :user_id"),
+        {"user_id": user["id"]}
+    ).scalar()
+
+    if current_count >= limit:
+        raise HTTPException(
+            status_code=403,
+            detail=f"You can only watch {limit} facilities with your current plan. Upgrade to watch more."
+        )
+
+    # Check facility exists
+    facility = db.execute(
+        text("SELECT id FROM facilities WHERE id = :facility_id"),
+        {"facility_id": facility_id}
+    ).first()
+
+    if not facility:
+        raise HTTPException(status_code=404, detail="Facility not found")
+
+    # Upsert watched facility
+    db.execute(
+        text("""
+            INSERT INTO watched_facilities (user_id, facility_id)
+            VALUES (:user_id, :facility_id)
+            ON CONFLICT DO NOTHING
+        """),
+        {"user_id": user["id"], "facility_id": facility_id}
+    )
+    db.commit()
+
+    return {"success": True, "message": "Facility added to watch list"}
+
+
+@router.put("/me/watched-facilities/{facility_id}")
+async def update_watch_preferences(
+    facility_id: str,
+    update: WatchedFacilityUpdate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+):
+    """Update notification preferences for a watched facility"""
+    user = get_or_create_user(db, current_user)
+
+    # Build update fields
+    updates = []
+    params = {"user_id": user["id"], "facility_id": facility_id}
+
+    if update.notify_email is not None:
+        updates.append("notify_email = :notify_email")
+        params["notify_email"] = update.notify_email
+
+    if update.notification_frequency is not None:
+        if update.notification_frequency not in ["instant", "daily", "weekly"]:
+            raise HTTPException(status_code=400, detail="Invalid notification frequency")
+        updates.append("notification_frequency = :frequency")
+        params["frequency"] = update.notification_frequency
+
+    if not updates:
+        return {"success": True, "message": "No changes"}
+
+    result = db.execute(
+        text(f"""
+            UPDATE watched_facilities
+            SET {", ".join(updates)}
+            WHERE user_id = :user_id AND facility_id = :facility_id
+            RETURNING id
+        """),
+        params
+    ).first()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Watched facility not found")
+
+    db.commit()
+    return {"success": True, "message": "Watch preferences updated"}
+
+
+@router.delete("/me/watched-facilities/{facility_id}")
+async def unwatch_facility(
+    facility_id: str,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+):
+    """Stop watching a facility"""
+    user = get_or_create_user(db, current_user)
+
+    db.execute(
+        text("""
+            DELETE FROM watched_facilities
+            WHERE user_id = :user_id AND facility_id = :facility_id
+        """),
+        {"user_id": user["id"], "facility_id": facility_id}
+    )
+    db.commit()
+
+    return {"success": True, "message": "Facility removed from watch list"}
+
+
 @router.delete("/users/me")
 async def delete_account(
     db: Session = Depends(get_db),
@@ -516,52 +779,68 @@ async def delete_account(
 
     This action cannot be undone.
     """
+    import sys
+    print(f"[DELETE ACCOUNT] Starting deletion for user: {current_user.email}", file=sys.stderr, flush=True)
+
     user = get_or_create_user(db, current_user)
     user_id = user["id"]
+    print(f"[DELETE ACCOUNT] User ID: {user_id}", file=sys.stderr, flush=True)
 
     try:
-        # Delete all related data first (foreign key constraints)
-        # Saved jobs
-        db.execute(
-            text("DELETE FROM saved_jobs WHERE user_id = :user_id"),
-            {"user_id": user_id}
-        )
+        # Delete all related data first (all tables with user_id column)
+        tables_with_user_id = [
+            "alerts",
+            "auth_tokens",
+            "community_replies",
+            "community_votes",
+            "community_posts",
+            "coupon_redemptions",
+            "email_notifications",
+            "email_tokens",
+            "facility_alerts",
+            "headshots",
+            "job_alerts",
+            "job_applications",
+            "resumes",
+            "saved_jobs",
+            "subscriptions",
+            "sully_interactions",
+            "support_tickets",
+            "user_applications",
+            "user_ceus",
+            "watched_facilities",
+        ]
 
-        # Applications
-        db.execute(
-            text("DELETE FROM applications WHERE user_id = :user_id"),
-            {"user_id": user_id}
-        )
-
-        # Job alerts
-        db.execute(
-            text("DELETE FROM job_alerts WHERE user_id = :user_id"),
-            {"user_id": user_id}
-        )
-
-        # Notifications
-        db.execute(
-            text("DELETE FROM notifications WHERE user_id = :user_id"),
-            {"user_id": user_id}
-        )
-
-        # Community posts
-        db.execute(
-            text("DELETE FROM community_posts WHERE user_id = :user_id"),
-            {"user_id": user_id}
-        )
+        for table in tables_with_user_id:
+            try:
+                print(f"[DELETE ACCOUNT] Deleting from {table}...", file=sys.stderr, flush=True)
+                db.execute(
+                    text(f"DELETE FROM {table} WHERE user_id = :user_id"),
+                    {"user_id": user_id}
+                )
+                print(f"[DELETE ACCOUNT] Deleted from {table} OK", file=sys.stderr, flush=True)
+            except Exception as table_error:
+                print(f"[DELETE ACCOUNT] Error deleting from {table}: {table_error}", file=sys.stderr, flush=True)
+                # Table might not exist, continue
+                pass
 
         # Finally delete the user
+        print(f"[DELETE ACCOUNT] Deleting user record...", file=sys.stderr, flush=True)
         db.execute(
             text("DELETE FROM users WHERE id = :user_id"),
             {"user_id": user_id}
         )
 
+        print(f"[DELETE ACCOUNT] Committing transaction...", file=sys.stderr, flush=True)
         db.commit()
 
+        print(f"[DELETE ACCOUNT] Success!", file=sys.stderr, flush=True)
         return {"success": True, "message": "Account deleted successfully"}
 
     except Exception as e:
+        print(f"[DELETE ACCOUNT] EXCEPTION: {type(e).__name__}: {str(e)}", file=sys.stderr, flush=True)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         db.rollback()
         raise HTTPException(
             status_code=500,

@@ -5,7 +5,7 @@ import { useAuth } from 'react-oidc-context'
 import {
   ArrowLeft, MapPin, Clock, DollarSign, Building2, Bookmark, BookmarkCheck,
   ExternalLink, Calendar, Award, Stethoscope, CheckCircle, Lock, Unlock, Sparkles, Crown, Heart,
-  GraduationCap, Briefcase, Gift, Loader2, FileText, MessageCircle
+  GraduationCap, Briefcase, Gift, Loader2, FileText, MessageCircle, Share2, Copy, Check as CheckIcon
 } from 'lucide-react'
 import { api } from '../api/client'
 import { toTitleCase } from '../utils/format'
@@ -100,7 +100,10 @@ export default function JobDetail() {
   const auth = useAuth()
   const queryClient = useQueryClient()
   const [showApplyToast, setShowApplyToast] = useState(false)
+  const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'extracted' | 'original'>('extracted')
+  const [showShareMenu, setShowShareMenu] = useState(false)
+  const [linkCopied, setLinkCopied] = useState(false)
   const [sullyOpinion, setSullyOpinion] = useState<string | null>(null)
   const [sullyLoading, setSullyLoading] = useState(false)
   const [sullyMood, setSullyMood] = useState<'optimistic' | 'neutral' | 'stern' | 'nofilter'>('optimistic')
@@ -189,6 +192,44 @@ export default function JobDetail() {
     window.open(job.source_url, '_blank', 'noopener,noreferrer')
   }
 
+  // Share functions
+  const getShareUrl = () => `https://vanurses.net/jobs/${id}`
+  const getShareText = (job: any) => `Check out this ${job.nursing_type || 'nursing'} job at ${job.facility_name || 'a Virginia hospital'}: ${job.title}`
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(getShareUrl())
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 2000)
+    } catch {
+      // Fallback for older browsers
+      const textarea = document.createElement('textarea')
+      textarea.value = getShareUrl()
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 2000)
+    }
+  }
+
+  const shareToFacebook = (job: any) => {
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(getShareUrl())}`, '_blank', 'width=600,height=400')
+  }
+
+  const shareToTwitter = (job: any) => {
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(getShareText(job))}&url=${encodeURIComponent(getShareUrl())}`, '_blank', 'width=600,height=400')
+  }
+
+  const shareToLinkedIn = (job: any) => {
+    window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(getShareUrl())}`, '_blank', 'width=600,height=400')
+  }
+
+  const shareViaEmail = (job: any) => {
+    window.location.href = `mailto:?subject=${encodeURIComponent(`Nursing Job: ${job.title}`)}&body=${encodeURIComponent(`${getShareText(job)}\n\n${getShareUrl()}`)}`
+  }
+
   // Check if job is saved
   const { data: savedJobs } = useQuery({
     queryKey: ['saved-jobs'],
@@ -196,13 +237,18 @@ export default function JobDetail() {
     enabled: auth.isAuthenticated
   })
 
-  const isSaved = savedJobs?.some((j: { id: string }) => j.id === id)
+  const isSaved = Array.isArray(savedJobs) && savedJobs.some((j: { id: string }) => j.id === id)
 
   // Save job mutation
   const saveMutation = useMutation({
     mutationFn: () => api.post(`/api/me/saved-jobs/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['saved-jobs'] })
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.detail || 'Failed to save job'
+      setSaveErrorMessage(message)
+      setTimeout(() => setSaveErrorMessage(null), 5000)
     }
   })
 
@@ -476,14 +522,108 @@ export default function JobDetail() {
                   )}
                 </button>
               ) : (
-                <Link
-                  to="/login"
+                <button
+                  onClick={() => auth.signinRedirect()}
                   className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
                 >
                   <Bookmark className="w-4 h-4" />
                   Save
-                </Link>
+                </button>
               )}
+
+              {/* Share Button with Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowShareMenu(!showShareMenu)}
+                  className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
+                >
+                  <Share2 className="w-4 h-4" />
+                  Share
+                </button>
+
+                {/* Share Dropdown Menu */}
+                {showShareMenu && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setShowShareMenu(false)}
+                    />
+                    <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl border border-slate-200 shadow-lg z-20 py-2">
+                      <div className="px-3 py-2 border-b border-slate-100">
+                        <p className="text-xs text-slate-500">Share this job on VANurses</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          copyToClipboard()
+                          setShowShareMenu(false)
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 text-slate-700"
+                      >
+                        {linkCopied ? (
+                          <>
+                            <CheckIcon className="w-4 h-4 text-emerald-500" />
+                            <span className="text-emerald-600">Link Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4" />
+                            <span>Copy Link</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          shareToFacebook(job)
+                          setShowShareMenu(false)
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 text-slate-700"
+                      >
+                        <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                        </svg>
+                        <span>Facebook</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          shareToTwitter(job)
+                          setShowShareMenu(false)
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 text-slate-700"
+                      >
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                        </svg>
+                        <span>X (Twitter)</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          shareToLinkedIn(job)
+                          setShowShareMenu(false)
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 text-slate-700"
+                      >
+                        <svg className="w-4 h-4 text-blue-700" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+                        </svg>
+                        <span>LinkedIn</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          shareViaEmail(job)
+                          setShowShareMenu(false)
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 text-slate-700"
+                      >
+                        <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        <span>Email</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+
               {job.source_url && (
                 <button
                   onClick={() => handleApplyClick(job)}
@@ -889,6 +1029,25 @@ export default function JobDetail() {
               Update your status in <Link to="/applications" className="underline">Applications</Link> after applying.
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Save Error Toast */}
+      {saveErrorMessage && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-orange-600 text-white px-6 py-4 rounded-xl shadow-lg animate-slide-up z-50 text-center max-w-sm">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <Lock className="w-5 h-5" />
+            <p className="font-medium">Save limit reached</p>
+          </div>
+          <p className="text-sm text-orange-100 mb-3">
+            Free users can only save 1 job. Upgrade to save more!
+          </p>
+          <Link
+            to="/billing"
+            className="inline-block bg-white text-orange-600 font-semibold px-4 py-2 rounded-lg hover:bg-orange-50"
+          >
+            Upgrade now
+          </Link>
         </div>
       )}
     </div>

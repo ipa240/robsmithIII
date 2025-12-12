@@ -63,6 +63,12 @@ export default function Facilities() {
   // Free user visibility limit
   const FREE_VISIBLE_COUNT = 3
 
+  // Restricted facilities - show letter grade but lock detailed breakdown
+  const RESTRICTED_FACILITIES = ['inova fairfax hospital', 'inova loudoun hospital']
+  const isRestrictedFacility = (name: string) => RESTRICTED_FACILITIES.some(
+    restricted => name?.toLowerCase().includes(restricted.toLowerCase())
+  )
+
   const { data: regions } = useQuery({
     queryKey: ['regions'],
     queryFn: () => api.get('/api/facilities/regions').then(res => res.data.data)
@@ -289,23 +295,32 @@ export default function Facilities() {
             <h2 className="font-semibold text-slate-900">Top-Rated Facilities</h2>
           </div>
           <div className="flex gap-3 overflow-x-auto pb-2">
-            {latestScores.map((facility: any) => (
-              <Link
-                key={facility.id}
-                to={`/facilities/${facility.id}`}
-                className="flex-shrink-0 bg-white rounded-lg border border-slate-200 p-3 min-w-[200px] hover:border-emerald-300 hover:shadow-sm transition-all"
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold ${getGradeColor(facility.score?.ofs_grade)}`}>
-                    {facility.score?.ofs_grade || 'A'}
+            {latestScores.map((facility: any, idx: number) => {
+              const canSeeThisScore = canSeeAllScores || idx < FREE_VISIBLE_COUNT
+              return (
+                <Link
+                  key={facility.id}
+                  to={canSeeThisScore ? `/facilities/${facility.id}` : '/billing'}
+                  className="flex-shrink-0 bg-white rounded-lg border border-slate-200 p-3 min-w-[200px] hover:border-emerald-300 hover:shadow-sm transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    {canSeeThisScore ? (
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold ${getGradeColor(facility.score?.ofs_grade)}`}>
+                        {facility.score?.ofs_grade || 'A'}
+                      </div>
+                    ) : (
+                      <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center">
+                        <Lock className="w-4 h-4 text-amber-500" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-900 text-sm truncate">{toTitleCase(facility.name)}</p>
+                      <p className="text-xs text-slate-500">{facility.city}</p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="font-medium text-slate-900 text-sm truncate">{toTitleCase(facility.name)}</p>
-                    <p className="text-xs text-slate-500">{facility.city}</p>
-                  </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              )
+            })}
           </div>
         </div>
       )}
@@ -582,13 +597,26 @@ export default function Facilities() {
                     <div className="flex-shrink-0">
                       {canSeeScore ? (
                         facility.score ? (
-                          <div className="flex flex-col items-center">
-                            <span className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Facility Score</span>
-                            <div className={`w-14 h-14 rounded-xl flex flex-col items-center justify-center text-white ${getGradeColor(facility.score.ofs_grade)}`} title="OFS: 11 scoring indices">
-                              <span className="text-xl font-bold">{facility.score.ofs_grade}</span>
-                              <span className="text-[10px] opacity-80">{Math.round(facility.score.ofs_score)}</span>
+                          // For restricted facilities (INOVA), show grade with lock for free users
+                          isRestrictedFacility(facility.name) && !canSeeAllScores ? (
+                            <div className="flex flex-col items-center">
+                              <span className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Facility Score</span>
+                              <div className={`relative w-14 h-14 rounded-xl flex flex-col items-center justify-center text-white ${getGradeColor(facility.score.ofs_grade)}`} title="Upgrade to see details">
+                                <span className="text-xl font-bold">{facility.score.ofs_grade}</span>
+                                <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center">
+                                  <Lock className="w-3 h-3 text-amber-600" />
+                                </div>
+                              </div>
                             </div>
-                          </div>
+                          ) : (
+                            <div className="flex flex-col items-center">
+                              <span className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Facility Score</span>
+                              <div className={`w-14 h-14 rounded-xl flex flex-col items-center justify-center text-white ${getGradeColor(facility.score.ofs_grade)}`} title="OFS: 11 scoring indices">
+                                <span className="text-xl font-bold">{facility.score.ofs_grade}</span>
+                                <span className="text-[10px] opacity-80">{Math.round(facility.score.ofs_score)}</span>
+                              </div>
+                            </div>
+                          )
                         ) : (
                           <div className="flex flex-col items-center">
                             <span className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Facility Score</span>

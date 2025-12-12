@@ -654,33 +654,32 @@ async def get_experience_requirements(db: Session = Depends(get_db)):
 
     results = db.execute(text("""
         SELECT
-            CASE
-                WHEN years_experience_min IS NULL OR years_experience_min = 0 THEN 'Entry Level (0 years)'
-                WHEN years_experience_min = 1 THEN '1 Year'
-                WHEN years_experience_min = 2 THEN '2 Years'
-                WHEN years_experience_min BETWEEN 3 AND 4 THEN '3-4 Years'
-                ELSE '5+ Years'
-            END as experience_level,
-            COUNT(*) as jobs,
-            ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER(), 1) as percentage
-        FROM jobs
-        WHERE is_active = true
-        GROUP BY
-            CASE
-                WHEN years_experience_min IS NULL OR years_experience_min = 0 THEN 'Entry Level (0 years)'
-                WHEN years_experience_min = 1 THEN '1 Year'
-                WHEN years_experience_min = 2 THEN '2 Years'
-                WHEN years_experience_min BETWEEN 3 AND 4 THEN '3-4 Years'
-                ELSE '5+ Years'
-            END
-        ORDER BY
-            CASE
-                WHEN years_experience_min IS NULL OR years_experience_min = 0 THEN 0
-                WHEN years_experience_min = 1 THEN 1
-                WHEN years_experience_min = 2 THEN 2
-                WHEN years_experience_min BETWEEN 3 AND 4 THEN 3
-                ELSE 5
-            END
+            experience_level,
+            jobs,
+            ROUND(100.0 * jobs / SUM(jobs) OVER(), 1) as percentage,
+            sort_order
+        FROM (
+            SELECT
+                CASE
+                    WHEN years_experience_min IS NULL OR years_experience_min = 0 THEN 'Entry Level (0 years)'
+                    WHEN years_experience_min = 1 THEN '1 Year'
+                    WHEN years_experience_min = 2 THEN '2 Years'
+                    WHEN years_experience_min BETWEEN 3 AND 4 THEN '3-4 Years'
+                    ELSE '5+ Years'
+                END as experience_level,
+                CASE
+                    WHEN years_experience_min IS NULL OR years_experience_min = 0 THEN 0
+                    WHEN years_experience_min = 1 THEN 1
+                    WHEN years_experience_min = 2 THEN 2
+                    WHEN years_experience_min BETWEEN 3 AND 4 THEN 3
+                    ELSE 5
+                END as sort_order,
+                COUNT(*) as jobs
+            FROM jobs
+            WHERE is_active = true
+            GROUP BY 1, 2
+        ) sub
+        ORDER BY sort_order
     """)).fetchall()
 
     return [

@@ -95,13 +95,45 @@ export default function Landing() {
               )}
             </div>
 
-            {/* Mobile Menu Button */}
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 text-white"
-            >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
+            {/* Mobile Nav */}
+            <div className="md:hidden flex items-center gap-1">
+              <Link to="/jobs" className="text-white/80 hover:text-white text-sm font-medium px-2 py-1">
+                Jobs
+              </Link>
+              <Link to="/facilities" className="text-white/80 hover:text-white text-sm font-medium px-2 py-1">
+                Ratings
+              </Link>
+              {!auth.isAuthenticated && (
+                <>
+                  <button
+                    onClick={() => auth.signinRedirect()}
+                    className="text-white/80 hover:text-white text-sm font-medium px-2 py-1"
+                  >
+                    Sign In
+                  </button>
+                  <button
+                    onClick={() => auth.signinRedirect()}
+                    className="bg-white text-slate-900 px-3 py-1.5 rounded-lg text-sm font-semibold"
+                  >
+                    Sign Up
+                  </button>
+                </>
+              )}
+              {auth.isAuthenticated && (
+                <Link
+                  to="/dashboard"
+                  className="bg-white text-slate-900 px-3 py-1.5 rounded-lg text-sm font-semibold"
+                >
+                  Dashboard
+                </Link>
+              )}
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="p-2 text-white ml-1"
+              >
+                {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              </button>
+            </div>
           </div>
 
         </div>

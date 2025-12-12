@@ -106,14 +106,14 @@ export default function BlurOverlay({
 
             {/* Primary CTA */}
             {showSignupCta && !isAuthenticated ? (
-              <Link
-                to="/login"
+              <button
+                onClick={() => auth.signinRedirect()}
                 className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
               >
                 <Sparkles className="w-5 h-5" />
                 Create Free Account
                 <ChevronRight className="w-4 h-4" />
-              </Link>
+              </button>
             ) : (
               <Link
                 to={ctaLink || '/billing'}
@@ -166,12 +166,12 @@ export function BlurredValue({
 export function ViewLimitBanner({
   title = "You've reached your viewing limit",
   description = "Create a free account to continue exploring jobs",
-  isAuthenticated = false,
 }: {
   title?: string
   description?: string
-  isAuthenticated?: boolean
 }) {
+  const auth = useAuth()
+
   return (
     <div className="bg-gradient-to-r from-primary-50 to-teal-50 border border-primary-200 rounded-xl p-6 text-center">
       <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary-100 text-primary-600 mb-3">
@@ -179,14 +179,14 @@ export function ViewLimitBanner({
       </div>
       <h3 className="text-lg font-semibold text-slate-900 mb-2">{title}</h3>
       <p className="text-slate-600 mb-4">{description}</p>
-      {!isAuthenticated ? (
-        <Link
-          to="/login"
+      {!auth.isAuthenticated ? (
+        <button
+          onClick={() => auth.signinRedirect()}
           className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
         >
           <Sparkles className="w-4 h-4" />
           Sign Up Free
-        </Link>
+        </button>
       ) : (
         <Link
           to="/billing"

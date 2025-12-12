@@ -70,6 +70,13 @@ export default function Community() {
   const [showSuggestCategory, setShowSuggestCategory] = useState(false)
   const [newCategory, setNewCategory] = useState({ name: '', description: '', icon: 'MessageSquare' })
 
+  // Fetch current user info to determine post ownership
+  const { data: currentUser } = useQuery({
+    queryKey: ['current-user'],
+    queryFn: () => api.get('/api/me').then(res => res.data.data),
+    enabled: auth.isAuthenticated
+  })
+
   // Fetch categories from API
   const { data: categories = [], isLoading: categoriesLoading } = useQuery<Category[]>({
     queryKey: ['community-categories'],
@@ -482,32 +489,34 @@ export default function Community() {
                           {selectedPost.view_count}
                         </span>
                       </div>
-                      {/* Edit/Delete buttons - show for all posts in demo mode */}
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setEditPost({ title: selectedPost.title, content: selectedPost.content })
-                            setEditingPost(selectedPost)
-                          }}
-                          className="p-2 text-slate-400 hover:text-primary-600 hover:bg-slate-100 rounded-lg"
-                          title="Edit post"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            if (confirm('Are you sure you want to delete this post?')) {
-                              deletePost.mutate(selectedPost.id)
-                            }
-                          }}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                          title="Delete post"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      {/* Edit/Delete buttons - only show for post owner */}
+                      {currentUser?.id === selectedPost.author_id && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setEditPost({ title: selectedPost.title, content: selectedPost.content })
+                              setEditingPost(selectedPost)
+                            }}
+                            className="p-2 text-slate-400 hover:text-primary-600 hover:bg-slate-100 rounded-lg"
+                            title="Edit post"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (confirm('Are you sure you want to delete this post?')) {
+                                deletePost.mutate(selectedPost.id)
+                              }
+                            }}
+                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                            title="Delete post"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div className="prose prose-slate max-w-none">
                       <p className="whitespace-pre-wrap">{selectedPost.content}</p>
@@ -578,17 +587,19 @@ export default function Community() {
                             </span>
                             <span className="text-xs text-slate-500">{formatDate(reply.created_at)}</span>
                           </div>
-                          <button
-                            onClick={() => {
-                              if (confirm('Are you sure you want to delete this reply?')) {
-                                deleteReply.mutate(reply.id)
-                              }
-                            }}
-                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
-                            title="Delete reply"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
+                          {currentUser?.id === reply.author_id && (
+                            <button
+                              onClick={() => {
+                                if (confirm('Are you sure you want to delete this reply?')) {
+                                  deleteReply.mutate(reply.id)
+                                }
+                              }}
+                              className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                              title="Delete reply"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
                         </div>
                         <p className="text-slate-700 whitespace-pre-wrap">{reply.content}</p>
                       </div>

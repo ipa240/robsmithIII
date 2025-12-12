@@ -3,11 +3,17 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
   Briefcase, Building2, Bookmark, DollarSign, ArrowRight,
-  Newspaper, FileCheck, Clock, Send, Lock, Crown
+  Newspaper, FileCheck, Clock, Send, Lock, Crown, Eye
 } from 'lucide-react'
-import { api, setAuthToken } from '../api/client'
+import { api, setAuthToken, createAuthenticatedApi } from '../api/client'
 import { useEffect, useState } from 'react'
 import { useSubscription, isAdminUnlocked } from '../hooks/useSubscription'
+import MarketScoreGauge from '../components/dashboard/MarketScoreGauge'
+import QuickInsightsBar from '../components/dashboard/QuickInsightsBar'
+import PayPercentileWidget from '../components/dashboard/PayPercentileWidget'
+import RecommendationRows from '../components/dashboard/RecommendationRows'
+import StreakCounter from '../components/dashboard/StreakCounter'
+import CompleteOnboardingPrompt from '../components/dashboard/CompleteOnboardingPrompt'
 
 export default function Dashboard() {
   const auth = useAuth()
@@ -15,11 +21,15 @@ export default function Dashboard() {
   // Only show premium content if authenticated AND paid
   const canSeePremiumContent = (auth.isAuthenticated && isPaid) || isAdminUnlocked()
   const [sullyMessage, setSullyMessage] = useState('')
+  const [tokenReady, setTokenReady] = useState(false)
 
-  // Set auth token for API calls
+  // Set auth token for API calls - track when it's done
   useEffect(() => {
     if (auth.user?.access_token) {
       setAuthToken(auth.user.access_token)
+      setTokenReady(true)
+    } else {
+      setTokenReady(false)
     }
   }, [auth.user?.access_token])
 
@@ -41,13 +51,13 @@ export default function Dashboard() {
   const { data: savedJobs = [] } = useQuery({
     queryKey: ['saved-jobs'],
     queryFn: () => api.get('/api/me/saved-jobs').then(res => res.data.data || []),
-    enabled: !!auth.user?.access_token
+    enabled: tokenReady
   })
 
   const { data: applications = [] } = useQuery({
     queryKey: ['my-applications'],
     queryFn: () => api.get('/api/me/applications').then(res => res.data.data || []),
-    enabled: !!auth.user?.access_token
+    enabled: tokenReady
   })
 
   const { data: newsArticles = [] } = useQuery({
@@ -55,15 +65,62 @@ export default function Dashboard() {
     queryFn: () => api.get('/api/news', { params: { limit: 3 } }).then(res => res.data.data || [])
   })
 
+  // Query for watched facility jobs (Starter+ feature)
+  const { data: watchedFacilityJobs = [] } = useQuery({
+    queryKey: ['watched-facility-jobs'],
+    queryFn: () => api.get('/api/me/watched-facilities/jobs').then(res => res.data.data || []),
+    enabled: tokenReady && canSeePremiumContent
+  })
+
   const { data: trendsOverview } = useQuery({
     queryKey: ['trends-overview'],
     queryFn: () => api.get('/api/trends/overview').then(res => res.data)
   })
 
-  const { data: user } = useQuery({
+  const { data: user, isLoading: userLoading } = useQuery({
     queryKey: ['me'],
     queryFn: () => api.get('/api/me').then(res => res.data.data),
-    enabled: !!auth.user?.access_token
+    enabled: tokenReady
+  })
+
+  // New dashboard personalization queries
+  const { data: marketScore, isLoading: marketScoreLoading } = useQuery({
+    queryKey: ['dashboard', 'market-score'],
+    queryFn: () => api.get('/api/dashboard/market-score').then(res => res.data),
+    enabled: tokenReady && !!user?.onboarding_completed,
+    staleTime: 1000 * 60 * 30
+  })
+
+  // Create authenticated API using current token directly (more reliable than global state)
+  const accessToken = auth.user?.access_token
+  const authApi = createAuthenticatedApi(accessToken || null)
+
+  const { data: quickInsights, isLoading: quickInsightsLoading, isError: quickInsightsError } = useQuery({
+    queryKey: ['dashboard', 'quick-insights', !!accessToken],
+    queryFn: () => authApi.get('/api/dashboard/quick-insights').then(res => res.data),
+    enabled: !!accessToken,
+    staleTime: 1000 * 60 * 15
+  })
+
+  const { data: payPercentile, isLoading: payPercentileLoading } = useQuery({
+    queryKey: ['dashboard', 'pay-percentile'],
+    queryFn: () => api.get('/api/dashboard/pay-percentile').then(res => res.data),
+    enabled: tokenReady && !!user?.onboarding_completed,
+    staleTime: 1000 * 60 * 30
+  })
+
+  const { data: recommendations, isLoading: recommendationsLoading } = useQuery({
+    queryKey: ['dashboard', 'recommendations'],
+    queryFn: () => api.get('/api/dashboard/recommendations').then(res => res.data),
+    enabled: tokenReady,
+    staleTime: 1000 * 60 * 15
+  })
+
+  const { data: streak, isLoading: streakLoading } = useQuery({
+    queryKey: ['dashboard', 'streak'],
+    queryFn: () => api.get('/api/dashboard/streak').then(res => res.data),
+    enabled: tokenReady,
+    staleTime: 1000 * 60 * 5
   })
 
   // Try multiple name sources with fallbacks
@@ -161,28 +218,39 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* Upgrade Banner - ONE banner for all premium features */}
+      {/* Go Back to Jobs Button + Upgrade Banner */}
       {!canSeePremiumContent && (
-        <div className="bg-gradient-to-r from-primary-600 to-accent-600 rounded-xl p-6 text-white">
-          <div className="flex flex-col md:flex-row items-center gap-4">
-            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
-              <Crown className="w-6 h-6" />
+        <>
+          <Link
+            to="/jobs"
+            className="block w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 px-6 rounded-xl text-center transition-colors"
+          >
+            Go Back to Job Page!
+          </Link>
+          <div className="bg-gradient-to-r from-primary-600 to-accent-600 rounded-xl p-6 text-white">
+            <div className="flex flex-col md:flex-row items-center gap-4">
+              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+                <Crown className="w-6 h-6" />
+              </div>
+              <div className="flex-1 text-center md:text-left">
+                <h2 className="text-lg font-bold">Please support us!</h2>
+                <p className="text-primary-100 text-sm">
+                  Unlock all dashboard features, facility ratings, map and more for <span className="font-semibold text-white">$9</span>!
+                </p>
+                <p className="text-primary-200 text-xs mt-1">
+                  Built by an ICU nurse of 10 years and IT husband
+                </p>
+              </div>
+              <Link
+                to="/billing"
+                className="px-6 py-2.5 bg-white text-primary-600 rounded-lg font-semibold hover:bg-primary-50 flex-shrink-0 flex items-center gap-2"
+              >
+                <Crown className="w-4 h-4" />
+                Support Us
+              </Link>
             </div>
-            <div className="flex-1 text-center md:text-left">
-              <h2 className="text-lg font-bold">Unlock All Dashboard Features</h2>
-              <p className="text-primary-100 text-sm">
-                Starting at only <span className="font-semibold text-white">$9/month</span> · Built by a nurse, for nurses
-              </p>
-            </div>
-            <Link
-              to="/billing"
-              className="px-6 py-2.5 bg-white text-primary-600 rounded-lg font-semibold hover:bg-primary-50 flex-shrink-0 flex items-center gap-2"
-            >
-              <Crown className="w-4 h-4" />
-              Upgrade Now
-            </Link>
           </div>
-        </div>
+        </>
       )}
 
       {/* Personalized Matches CTA - Paid Feature */}
@@ -201,6 +269,40 @@ export default function Dashboard() {
             <ArrowRight className="w-6 h-6" />
           </div>
         </Link>
+      )}
+
+      {/* Personalized Insights Section - Only for authenticated users */}
+      {auth.isAuthenticated && (
+        <>
+          {/* Show onboarding prompt if not completed */}
+          {user && !user.onboarding_completed && (
+            <CompleteOnboardingPrompt />
+          )}
+
+          {/* Streak + Market Score Row - Show loading while user is loading, then show if onboarding completed */}
+          {(userLoading || user?.onboarding_completed) && (
+            <div className="grid lg:grid-cols-2 gap-6">
+              <StreakCounter data={streak} isLoading={streakLoading || userLoading} />
+              <MarketScoreGauge data={marketScore} isLoading={marketScoreLoading || userLoading} />
+            </div>
+          )}
+
+          {/* Quick Insights Bar */}
+          {canSeePremiumContent && !!accessToken && (
+            <QuickInsightsBar data={quickInsights} isLoading={quickInsightsLoading} isError={quickInsightsError} />
+          )}
+
+          {/* Pay Percentile + Recommendations - Show loading while user is loading */}
+          {canSeePremiumContent && (userLoading || user?.onboarding_completed) && (
+            <div className="grid lg:grid-cols-2 gap-6">
+              <PayPercentileWidget data={payPercentile} isLoading={payPercentileLoading || userLoading} />
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">Recommended For You</h3>
+                <RecommendationRows data={recommendations} isLoading={recommendationsLoading || userLoading} />
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Recent Jobs */}
@@ -359,6 +461,61 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* New Jobs from Watched Facilities - Starter+ Feature */}
+      {canSeePremiumContent && watchedFacilityJobs?.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <Eye className="w-5 h-5 text-amber-500" />
+              New Jobs from Watched Facilities
+            </h2>
+            <Link to="/profile" className="text-primary-600 hover:underline text-sm flex items-center gap-1">
+              Manage watched
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+          <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200 p-6">
+            <div className="space-y-3">
+              {watchedFacilityJobs.slice(0, 5).map((job: any) => (
+                <Link
+                  key={job.id}
+                  to={`/jobs/${job.id}`}
+                  className="block p-4 rounded-lg bg-white border border-amber-100 hover:border-amber-300 hover:shadow-sm transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-slate-900">{job.title}</h3>
+                      <div className="text-sm text-slate-500">
+                        {job.facility_name} • {job.city}, {job.state}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {job.nursing_type && (
+                        <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-full">
+                          {job.nursing_type}
+                        </span>
+                      )}
+                      {job.posted_at && (
+                        <span className="text-xs text-slate-400">
+                          {new Date(job.posted_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+            {watchedFacilityJobs.length > 5 && (
+              <div className="mt-4 text-center">
+                <Link to="/jobs" className="text-amber-700 hover:underline text-sm">
+                  View all {watchedFacilityJobs.length} jobs from watched facilities
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Two Column Bottom Section */}
       <div className="grid lg:grid-cols-2 gap-6">

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   User, Mail, Shield, Heart, MapPin, Briefcase, Award,
-  Edit2, Check, X, Lock, Crown, Trash2, AlertTriangle
+  Edit2, Check, X, Lock, Crown, Trash2, AlertTriangle, Eye, Building2, Loader2, ClipboardList
 } from 'lucide-react'
 import { api, setAuthToken } from '../api/client'
 
@@ -62,6 +62,34 @@ export default function Profile() {
     queryFn: () => api.get('/api/me/preferences').then(res => res.data.data),
     enabled: !!auth.user?.access_token
   })
+
+  // Query for watched facilities (Starter+ feature)
+  const { data: watchedFacilities = [] } = useQuery({
+    queryKey: ['watched-facilities'],
+    queryFn: () => api.get('/api/me/watched-facilities').then(res => res.data.data || []),
+    enabled: !!auth.user?.access_token
+  })
+
+  // Unwatch facility mutation
+  const unwatchMutation = useMutation({
+    mutationFn: (facilityId: string) => api.delete(`/api/me/watched-facilities/${facilityId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['watched-facilities'] })
+    }
+  })
+
+  // Get watch limit based on tier
+  const getWatchLimit = () => {
+    const t = user?.tier?.toLowerCase() || 'free'
+    switch(t) {
+      case 'starter': return 3
+      case 'pro': return 5
+      case 'premium': case 'admin': case 'hr': return 999
+      default: return 0
+    }
+  }
+  const watchLimit = getWatchLimit()
+  const canWatchFacilities = ['starter', 'pro', 'premium', 'admin', 'hr'].includes(user?.tier?.toLowerCase() || '')
 
   const updatePrefsMutation = useMutation({
     mutationFn: (data: any) => api.put('/api/me/preferences', data),
@@ -242,6 +270,39 @@ export default function Profile() {
         </div>
       </div>
 
+      {/* Complete Profile Banner - Show when profile is incomplete */}
+      {!preferences?.license_type && (
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200 p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <ClipboardList className="w-6 h-6 text-amber-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-amber-900">Complete Your Profile</h3>
+              <p className="text-amber-700 text-sm mt-1">
+                Add your nursing credentials to get personalized job recommendations and better facility matches.
+              </p>
+              <div className="flex gap-3 mt-4">
+                <Link
+                  to="/onboarding"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm font-medium"
+                >
+                  <ClipboardList className="w-4 h-4" />
+                  Start Onboarding
+                </Link>
+                <Link
+                  to="/profile/edit"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 text-sm font-medium"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  Edit Manually
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* License & Experience */}
       <div className="bg-white rounded-xl border border-slate-200 p-6">
         <div className="flex items-center justify-between mb-4">
@@ -282,6 +343,95 @@ export default function Profile() {
                   {s}
                 </span>
               ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Watched Facilities - Starter+ Feature */}
+      <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Eye className="w-5 h-5 text-amber-500" />
+            <h2 className="text-lg font-semibold text-slate-900">Watched Facilities</h2>
+          </div>
+          {canWatchFacilities && (
+            <span className="text-sm text-slate-500">
+              {watchedFacilities.length}/{watchLimit === 999 ? '∞' : watchLimit} watched
+            </span>
+          )}
+        </div>
+
+        {canWatchFacilities ? (
+          watchedFacilities.length > 0 ? (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-500 mb-3">
+                Get notified when new jobs are posted at these facilities.
+              </p>
+              {watchedFacilities.map((watched: any) => (
+                <div key={watched.facility_id} className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-100">
+                  <Link
+                    to={`/facilities/${watched.facility_id}`}
+                    className="flex items-center gap-3 flex-1 hover:text-primary-600"
+                  >
+                    <Building2 className="w-5 h-5 text-amber-600" />
+                    <div>
+                      <div className="font-medium text-slate-900">{watched.facility_name}</div>
+                      <div className="text-sm text-slate-500">{watched.facility_city}, {watched.facility_state}</div>
+                    </div>
+                  </Link>
+                  <button
+                    onClick={() => unwatchMutation.mutate(watched.facility_id)}
+                    disabled={unwatchMutation.isPending}
+                    className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition-colors"
+                    title="Stop watching this facility"
+                  >
+                    {unwatchMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <X className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              ))}
+              <Link
+                to="/facilities"
+                className="block text-center text-sm text-primary-600 hover:underline mt-3"
+              >
+                Browse facilities to watch more
+              </Link>
+            </div>
+          ) : (
+            <div className="text-center py-6">
+              <Eye className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+              <p className="text-slate-500 text-sm mb-2">No facilities watched yet</p>
+              <p className="text-xs text-slate-400 mb-3">
+                Watch facilities to get notified when they post new jobs
+              </p>
+              <Link
+                to="/facilities"
+                className="inline-block px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700"
+              >
+                Browse Facilities
+              </Link>
+            </div>
+          )
+        ) : (
+          <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg border border-amber-200">
+            <div className="flex items-start gap-3">
+              <Crown className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-amber-900">Watch Facilities (Starter+ Feature)</p>
+                <p className="text-sm text-amber-700 mt-1">
+                  Upgrade to Starter or higher to watch up to {tier === 'free' ? '3' : '5'} facilities and get notified when they post new jobs.
+                </p>
+                <Link
+                  to="/billing"
+                  className="inline-block mt-2 px-4 py-2 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700"
+                >
+                  Upgrade Now
+                </Link>
+              </div>
             </div>
           </div>
         )}

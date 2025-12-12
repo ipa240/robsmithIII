@@ -5,8 +5,9 @@ After=network.target postgresql.service
 [Service]
 Type=simple
 User=ian
-WorkingDirectory=/home/ian/vanurses
-ExecStart=/home/ian/vanurses/venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 5010
+WorkingDirectory=/home/ian/vanurses/api
+Environment=PATH=/home/ian/vanurses/api/venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/ian/vanurses/api/venv/bin/gunicorn app.main:app --workers 3 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:5011 --timeout 120
 Restart=always
 RestartSec=10
 

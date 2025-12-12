@@ -27,6 +27,40 @@ export function getAuthToken(): string | null {
   return currentToken
 }
 
+// Create an authenticated request function that explicitly uses a token
+export function createAuthenticatedApi(token: string | null) {
+  return {
+    get: (url: string, config?: any) => api.get(url, {
+      ...config,
+      headers: {
+        ...config?.headers,
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
+    }),
+    post: (url: string, data?: any, config?: any) => api.post(url, data, {
+      ...config,
+      headers: {
+        ...config?.headers,
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
+    }),
+    put: (url: string, data?: any, config?: any) => api.put(url, data, {
+      ...config,
+      headers: {
+        ...config?.headers,
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
+    }),
+    delete: (url: string, config?: any) => api.delete(url, {
+      ...config,
+      headers: {
+        ...config?.headers,
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
+    })
+  }
+}
+
 // Admin unlock storage key (matches useSubscription.ts)
 const ADMIN_UNLOCK_STORAGE_KEY = 'vanurses_admin_unlock'
 

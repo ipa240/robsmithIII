@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from .config import get_settings
-from .routers import jobs, facilities, stats, users, sully, billing, notifications, admin, support, hr, applications, community, learning, news, resume, trends, alerts
+from .routers import jobs, facilities, stats, users, sully, billing, notifications, admin, support, hr, applications, community, learning, news, resume, trends, alerts, dashboard
 
 settings = get_settings()
 
@@ -41,6 +41,7 @@ app.include_router(news.router)
 app.include_router(resume.router)
 app.include_router(trends.router)
 app.include_router(alerts.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/")

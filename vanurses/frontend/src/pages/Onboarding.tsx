@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from 'react-oidc-context'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Check, ChevronRight, ChevronLeft, Heart, Star, Crown, Sparkles } from 'lucide-react'
+import { Check, ChevronRight, ChevronLeft, Heart, Star, Crown, Sparkles, Briefcase, Building2 } from 'lucide-react'
 import { api, setAuthToken } from '../api/client'
 
 const NURSING_TYPES = ['RN', 'LPN', 'CNA', 'NP', 'CRNA', 'CNM', 'CNS']
@@ -257,7 +257,9 @@ function OnboardingComplete({ formData }: { formData: any }) {
 
 export default function Onboarding() {
   const auth = useAuth()
-  const [currentStep, setCurrentStep] = useState(1)
+  const navigate = useNavigate()
+  const [currentStep, setCurrentStep] = useState(0) // Start at 0 for intent selection
+  const [userIntent, setUserIntent] = useState<'jobs' | 'facilities' | null>(null)
 
   const [formData, setFormData] = useState({
     // License
@@ -305,6 +307,22 @@ export default function Onboarding() {
     return arr.includes(item) ? arr.filter(i => i !== item) : [...arr, item]
   }
 
+  // Handle intent selection (step 0)
+  const handleIntent = async (intent: 'jobs' | 'facilities') => {
+    if (intent === 'facilities') {
+      // Mark onboarding complete and skip to facilities page
+      try {
+        await api.post('/api/me/onboarding/complete')
+      } catch (e) {
+        // Continue anyway - they can browse without completing
+      }
+      navigate('/facilities')
+    } else {
+      setUserIntent('jobs')
+      setCurrentStep(1) // Proceed to Welcome
+    }
+  }
+
   const nextStep = () => {
     if (currentStep < steps.length) {
       // Save preferences when moving from step 6 to step 7 (complete)
@@ -324,32 +342,76 @@ export default function Onboarding() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center p-4">
       <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden">
-        {/* Progress */}
-        <div className="bg-slate-50 px-6 py-4 border-b">
-          <div className="flex items-center justify-between">
-            {steps.map((step, i) => (
-              <div key={step.id} className="flex items-center">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                  currentStep > step.id
-                    ? 'bg-primary-600 text-white'
-                    : currentStep === step.id
+        {/* Progress - Hidden on step 0 (intent selection) */}
+        {currentStep > 0 && (
+          <div className="bg-slate-50 px-6 py-4 border-b">
+            <div className="flex items-center justify-between">
+              {steps.map((step, i) => (
+                <div key={step.id} className="flex items-center">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                    currentStep > step.id
                       ? 'bg-primary-600 text-white'
-                      : 'bg-slate-200 text-slate-500'
-                }`}>
-                  {currentStep > step.id ? <Check className="w-4 h-4" /> : step.id}
+                      : currentStep === step.id
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-slate-200 text-slate-500'
+                  }`}>
+                    {currentStep > step.id ? <Check className="w-4 h-4" /> : step.id}
+                  </div>
+                  {i < steps.length - 1 && (
+                    <div className={`w-12 h-0.5 mx-2 ${
+                      currentStep > step.id ? 'bg-primary-600' : 'bg-slate-200'
+                    }`} />
+                  )}
                 </div>
-                {i < steps.length - 1 && (
-                  <div className={`w-12 h-0.5 mx-2 ${
-                    currentStep > step.id ? 'bg-primary-600' : 'bg-slate-200'
-                  }`} />
-                )}
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Content */}
         <div className="p-8">
+          {/* Intent Selection Step (Step 0) */}
+          {currentStep === 0 && (
+            <div className="text-center max-w-2xl mx-auto">
+              <h1 className="text-3xl font-bold text-slate-900 mb-3">
+                What brings you to VANurses?
+              </h1>
+              <p className="text-slate-600 mb-8">
+                Help us personalize your experience
+              </p>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* Job Search Card */}
+                <button
+                  onClick={() => handleIntent('jobs')}
+                  className="p-6 rounded-xl border-2 border-slate-200 hover:border-primary-400 hover:bg-primary-50 transition-all text-left group"
+                >
+                  <div className="w-14 h-14 bg-primary-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-primary-200 transition-colors">
+                    <Briefcase className="w-7 h-7 text-primary-600" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-slate-900 mb-2">Find Nursing Jobs</h3>
+                  <p className="text-slate-500 text-sm">
+                    Get personalized job matches based on your preferences and priorities
+                  </p>
+                </button>
+
+                {/* Facility Ratings Card */}
+                <button
+                  onClick={() => handleIntent('facilities')}
+                  className="p-6 rounded-xl border-2 border-slate-200 hover:border-emerald-400 hover:bg-emerald-50 transition-all text-left group"
+                >
+                  <div className="w-14 h-14 bg-emerald-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-emerald-200 transition-colors">
+                    <Building2 className="w-7 h-7 text-emerald-600" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-slate-900 mb-2">Compare Facility Ratings</h3>
+                  <p className="text-slate-500 text-sm">
+                    Browse and compare hospital ratings, reviews, and scores
+                  </p>
+                </button>
+              </div>
+            </div>
+          )}
+
           {currentStep === 1 && (
             <div className="text-center">
               <h2 className="text-2xl font-bold text-slate-900 mb-4">Welcome to VANurses!</h2>
@@ -681,8 +743,8 @@ export default function Onboarding() {
           )}
         </div>
 
-        {/* Actions - hidden on step 7 since OnboardingComplete has its own buttons */}
-        {currentStep < 7 && (
+        {/* Actions - hidden on step 0 (intent) and step 7 (complete) since they have their own buttons */}
+        {currentStep > 0 && currentStep < 7 && (
           <div className="px-8 py-4 bg-slate-50 border-t flex justify-between">
             {currentStep > 1 ? (
               <button

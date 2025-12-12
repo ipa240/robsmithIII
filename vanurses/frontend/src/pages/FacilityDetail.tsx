@@ -1,8 +1,8 @@
 import { useParams, Link } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from 'react-oidc-context'
 import { useEffect, useState } from 'react'
-import { ArrowLeft, MapPin, Building2, Star, ExternalLink, Users, BarChart3, Lock, Unlock, Crown, ChevronRight, MessageCircle, Loader2 } from 'lucide-react'
+import { ArrowLeft, MapPin, Building2, Star, ExternalLink, Users, BarChart3, Lock, Unlock, Crown, ChevronRight, MessageCircle, Loader2, Eye, EyeOff, Bell } from 'lucide-react'
 import { api, setAuthToken } from '../api/client'
 import { toTitleCase } from '../utils/format'
 import { isAdminUnlocked } from '../hooks/useSubscription'
@@ -104,15 +104,25 @@ export default function FacilityDetail() {
     queryFn: () => api.get(`/api/facilities/${id}`).then(res => res.data.data)
   })
 
-  // Get top 3 facilities to check if current facility qualifies for free score view
-  const { data: topFacilities } = useQuery({
-    queryKey: ['top-facilities-for-free'],
-    queryFn: () => api.get('/api/facilities', { params: { limit: 3 } }).then(res => res.data.data)
+  // Fetch the #1 ranked facility to check if this is the one free users can view
+  const { data: topFacility } = useQuery({
+    queryKey: ['top-facility'],
+    queryFn: () => api.get('/api/facilities?limit=1&sort=score').then(res => res.data.data?.[0]),
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   })
 
-  // Check if this facility is in the top 3 (free users can see scores for first 3)
-  const isInTop3 = topFacilities?.some((f: any) => f.id === id)
-  const canSeeScore = isPaidUser || isInTop3
+  // Check if this facility is the #1 ranked facility
+  const isTopOneFacility = topFacility && facility && topFacility.id === facility.id
+
+  // Only paid users OR viewing the #1 ranked facility can see scores
+  const canSeeScore = isPaidUser || isTopOneFacility
+
+  // Restricted facilities - only show letter grade for free users, lock detailed breakdown
+  const RESTRICTED_FACILITIES = ['inova fairfax hospital', 'inova loudoun hospital']
+  const isRestrictedFacility = facility?.name && RESTRICTED_FACILITIES.some(
+    name => facility.name.toLowerCase().includes(name.toLowerCase())
+  )
+  const canSeeDetailedBreakdown = isPaidUser || !isRestrictedFacility
 
   const { data: jobs } = useQuery({
     queryKey: ['facility-jobs', id],
@@ -122,6 +132,55 @@ export default function FacilityDetail() {
   const { data: transparency, isLoading: transparencyLoading } = useQuery({
     queryKey: ['facility-transparency', id],
     queryFn: () => api.get(`/api/facilities/${id}/transparency`).then(res => res.data.data)
+  })
+
+  const queryClient = useQueryClient()
+
+  // Watch facility functionality - tier limits: Free=0, Facilities=0, Starter=3, Pro=5, Premium=∞
+  const canWatchFacilities = auth.isAuthenticated && ['starter', 'pro', 'premium', 'admin', 'hr'].includes(userTier.toLowerCase()) || isAdminUnlocked()
+
+  // Check if this facility is watched
+  const { data: watchStatus } = useQuery({
+    queryKey: ['watch-status', id],
+    queryFn: () => api.get(`/api/me/watched-facilities/${id}/status`).then(res => res.data),
+    enabled: auth.isAuthenticated || isAdminUnlocked()
+  })
+
+  // Get watched facilities list to check limits
+  const { data: watchedFacilities } = useQuery({
+    queryKey: ['watched-facilities'],
+    queryFn: () => api.get('/api/me/watched-facilities').then(res => res.data),
+    enabled: auth.isAuthenticated || isAdminUnlocked()
+  })
+
+  // Get tier limits
+  const getWatchLimit = () => {
+    switch(userTier.toLowerCase()) {
+      case 'starter': return 3
+      case 'pro': return 5
+      case 'premium': case 'admin': case 'hr': return 999
+      default: return 0
+    }
+  }
+
+  const watchLimit = getWatchLimit()
+  const watchedCount = watchedFacilities?.data?.length || 0
+  const isWatched = watchStatus?.is_watching || false
+  const isAtLimit = watchedCount >= watchLimit && !isWatched
+
+  // Toggle watch mutation
+  const toggleWatch = useMutation({
+    mutationFn: async () => {
+      if (isWatched) {
+        return api.delete(`/api/me/watched-facilities/${id}`)
+      } else {
+        return api.post(`/api/me/watched-facilities/${id}`)
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['watch-status', id] })
+      queryClient.invalidateQueries({ queryKey: ['watched-facilities'] })
+    }
   })
 
   // Sully facility analysis
@@ -289,17 +348,66 @@ export default function FacilityDetail() {
             </div>
           </div>
 
-          {facility.career_url && (
-            <a
-              href={facility.career_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
-            >
-              Careers Site
-              <ExternalLink className="w-4 h-4" />
-            </a>
-          )}
+          <div className="flex flex-col gap-2">
+            {/* Watch Button */}
+            {canWatchFacilities ? (
+              <button
+                onClick={() => {
+                  if (isAtLimit) return
+                  toggleWatch.mutate()
+                }}
+                disabled={toggleWatch.isPending || isAtLimit}
+                title={isAtLimit ? `You've reached your limit of ${watchLimit} watched facilities` : isWatched ? 'Stop watching this facility' : 'Watch this facility for new job alerts'}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+                  isWatched
+                    ? 'bg-amber-100 text-amber-700 border border-amber-200 hover:bg-amber-200'
+                    : isAtLimit
+                    ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                    : 'bg-primary-50 text-primary-700 border border-primary-200 hover:bg-primary-100'
+                }`}
+              >
+                {toggleWatch.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : isWatched ? (
+                  <Eye className="w-4 h-4" />
+                ) : (
+                  <Bell className="w-4 h-4" />
+                )}
+                {isWatched ? 'Watching' : isAtLimit ? 'Limit Reached' : 'Watch'}
+              </button>
+            ) : auth.isAuthenticated ? (
+              <Link
+                to="/billing"
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-600 to-accent-600 text-white rounded-lg font-medium hover:from-primary-700 hover:to-accent-700"
+                title="Upgrade to Starter+ to watch facilities"
+              >
+                <Bell className="w-4 h-4" />
+                Watch
+                <Crown className="w-3 h-3" />
+              </Link>
+            ) : (
+              <button
+                onClick={() => auth.signinRedirect()}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-600 to-accent-600 text-white rounded-lg font-medium hover:from-primary-700 hover:to-accent-700"
+                title="Sign in to watch facilities"
+              >
+                <Bell className="w-4 h-4" />
+                Watch
+              </button>
+            )}
+
+            {facility.career_url && (
+              <a
+                href={facility.career_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
+              >
+                Careers Site
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            )}
+          </div>
         </div>
       </div>
 
@@ -429,9 +537,32 @@ export default function FacilityDetail() {
         )}
       </div>
 
-      {/* OFS Scorecard */}
-      {facility.score && facility.score.indices && (
+      {/* OFS Scorecard locked placeholder for free users on non-top-1 facilities */}
+      {facility.score && facility.score.indices && !canSeeScore && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+          <div className="flex flex-col items-center justify-center py-8">
+            <div className="w-16 h-16 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center mb-4">
+              <Lock className="w-8 h-8 text-slate-400" />
+            </div>
+            <h2 className="text-lg font-semibold text-slate-900 mb-2">Facility Scores Locked</h2>
+            <p className="text-sm text-slate-600 text-center mb-4 max-w-md">
+              Upgrade to view detailed facility scores, ratings, and analytics for this facility.
+            </p>
+            <Link
+              to="/billing#plans"
+              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-600 to-accent-600 text-white rounded-lg hover:from-primary-700 hover:to-accent-700 transition-colors font-medium"
+            >
+              <Crown className="w-4 h-4" />
+              Upgrade to Unlock
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* OFS Scorecard - visible for paid users or top-1 facility */}
+      {facility.score && facility.score.indices && canSeeScore && (
+        <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+          {/* Letter grade header */}
           <div className="flex items-center gap-3 mb-6">
             <div className={`w-14 h-14 rounded-xl ${getGradeColor(facility.score.ofs_grade)} text-white flex items-center justify-center text-2xl font-bold shadow-lg`}>
               {facility.score.ofs_grade || '?'}
@@ -444,36 +575,57 @@ export default function FacilityDetail() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            {/* Main Score Gauge */}
-            <div className="flex justify-center">
-              <ScoreGauge
-                score={facility.score.ofs_score}
-                grade={facility.score.ofs_grade}
-                size="lg"
-              />
-            </div>
+          {/* Detailed breakdown - gated for restricted facilities */}
+          {canSeeDetailedBreakdown ? (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                {/* Main Score Gauge */}
+                <div className="flex justify-center">
+                  <ScoreGauge
+                    score={facility.score.ofs_score}
+                    grade={facility.score.ofs_grade}
+                    size="lg"
+                  />
+                </div>
 
-            {/* Radar Chart */}
-            <div className="flex justify-center">
-              <IndexRadar indices={facility.score.indices} />
-            </div>
-          </div>
+                {/* Radar Chart */}
+                <div className="flex justify-center">
+                  <IndexRadar indices={facility.score.indices} />
+                </div>
+              </div>
 
-          {/* Index Breakdown */}
-          <IndexBreakdown indices={facility.score.indices} />
+              {/* Index Breakdown */}
+              <IndexBreakdown indices={facility.score.indices} />
 
-          {/* JTI Card if available */}
-          {facility.jti && (
-            <div className="mt-6">
-              <JTICard data={facility.jti} />
+              {/* JTI Card if available */}
+              {facility.jti && (
+                <div className="mt-6">
+                  <JTICard data={facility.jti} />
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-6 border-t border-slate-100">
+              <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center mb-3">
+                <Lock className="w-6 h-6 text-amber-500" />
+              </div>
+              <p className="text-sm text-slate-600 text-center mb-3">
+                Upgrade to see the detailed score breakdown for this facility
+              </p>
+              <Link
+                to="/billing#plans"
+                className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium text-sm"
+              >
+                <Crown className="w-4 h-4" />
+                Upgrade to Pro
+              </Link>
             </div>
           )}
         </div>
       )}
 
-      {/* Premium Analytics - gated for pro users */}
-      {isPaidUser ? (
+      {/* Premium Analytics - gated for users who can see scores */}
+      {canSeeScore ? (
         <div className="mb-6">
           <FacilityAnalytics facilityId={id || ''} facilityName={toTitleCase(facility.name)} />
         </div>

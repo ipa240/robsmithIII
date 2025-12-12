@@ -147,6 +147,29 @@ export default function Map() {
 
   return (
     <div className="space-y-6">
+      {/* Upgrade Banner for Free Users */}
+      {!canSeeAllScores && (
+        <div className="bg-gradient-to-r from-primary-600 to-accent-600 rounded-xl p-4 text-white">
+          <div className="flex flex-col md:flex-row items-center gap-4">
+            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+              <Crown className="w-5 h-5" />
+            </div>
+            <div className="flex-1 text-center md:text-left">
+              <h2 className="font-bold">Unlock Full Map Experience</h2>
+              <p className="text-primary-100 text-sm">
+                See all facility scores, filter by grade, and find the best-rated hospitals in any region
+              </p>
+            </div>
+            <Link
+              to="/billing"
+              className="px-5 py-2 bg-white text-primary-600 rounded-lg font-semibold hover:bg-primary-50 flex-shrink-0"
+            >
+              Upgrade Now
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

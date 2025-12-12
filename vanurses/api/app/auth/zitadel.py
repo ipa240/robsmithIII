@@ -1,4 +1,4 @@
-"""Zitadel JWT Authentication"""
+"""Zitadel Authentication - supports both JWT and opaque tokens"""
 from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -17,66 +17,104 @@ settings = get_settings()
 def get_zitadel_jwks():
     """Fetch Zitadel's JWKS (JSON Web Key Set)"""
     try:
-        response = httpx.get(f"{settings.zitadel_issuer}/oauth/v2/keys", timeout=10)
+        # Use HTTPS for JWKS fetch (Cloudflare redirects http to https)
+        jwks_url = settings.zitadel_issuer.replace("http://", "https://") + "/oauth/v2/keys"
+        response = httpx.get(jwks_url, timeout=10, follow_redirects=True)
         return response.json()
     except Exception as e:
         print(f"Failed to fetch JWKS: {e}")
         return None
 
 
-def decode_token(token: str) -> dict:
-    """Decode and validate a Zitadel JWT token"""
+def validate_opaque_token(token: str) -> dict:
+    """Validate an opaque token by calling Zitadel's userinfo endpoint"""
     try:
-        # Get JWKS
-        jwks = get_zitadel_jwks()
-        if not jwks:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Unable to fetch authentication keys"
-            )
+        userinfo_url = settings.zitadel_issuer.replace("http://", "https://") + "/oidc/v1/userinfo"
+        print(f"[AUTH] Validating opaque token via userinfo endpoint: {userinfo_url}")
 
-        # Decode without verification first to get the header
-        unverified_header = jwt.get_unverified_header(token)
-
-        # Find the matching key
-        rsa_key = None
-        for key in jwks.get("keys", []):
-            if key["kid"] == unverified_header["kid"]:
-                rsa_key = key
-                break
-
-        if not rsa_key:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token key"
-            )
-
-        # Decode and verify the token
-        payload = jwt.decode(
-            token,
-            rsa_key,
-            algorithms=["RS256"],
-            issuer=settings.zitadel_issuer,
-            audience=settings.zitadel_client_id,
-            options={"verify_aud": bool(settings.zitadel_client_id)}
+        response = httpx.get(
+            userinfo_url,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+            follow_redirects=True
         )
 
-        return payload
+        if response.status_code == 200:
+            userinfo = response.json()
+            print(f"[AUTH] Userinfo response: sub={userinfo.get('sub')}, email={userinfo.get('email')}")
+            return userinfo
+        else:
+            print(f"[AUTH] Userinfo request failed: {response.status_code} - {response.text[:200]}")
+            return None
+    except Exception as e:
+        print(f"[AUTH] Error validating opaque token: {e}")
+        return None
 
-    except JWTError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {str(e)}"
-        )
+
+def decode_token(token: str) -> dict:
+    """Decode and validate a Zitadel token (JWT or opaque)"""
+    # Check if token looks like a JWT (3 parts separated by dots)
+    is_jwt_format = token.count('.') == 2
+
+    if is_jwt_format:
+        # Try to decode as JWT first
+        try:
+            # Get JWKS
+            jwks = get_zitadel_jwks()
+            if not jwks:
+                raise JWTError("Unable to fetch JWKS")
+
+            # Decode without verification first to get the header
+            unverified_header = jwt.get_unverified_header(token)
+
+            # Find the matching key
+            rsa_key = None
+            for key in jwks.get("keys", []):
+                if key["kid"] == unverified_header["kid"]:
+                    rsa_key = key
+                    break
+
+            if not rsa_key:
+                raise JWTError("No matching key found")
+
+            # Decode and verify the token
+            payload = jwt.decode(
+                token,
+                rsa_key,
+                algorithms=["RS256"],
+                issuer=settings.zitadel_issuer,
+                audience=settings.zitadel_client_id,
+                options={"verify_aud": bool(settings.zitadel_client_id)}
+            )
+            print(f"[AUTH] JWT validated successfully for sub={payload.get('sub')}")
+            return payload
+
+        except JWTError as e:
+            print(f"[AUTH] JWT decode failed: {str(e)}, trying opaque token validation...")
+    else:
+        print(f"[AUTH] Token is not JWT format (has {token.count('.')} dots), validating as opaque token...")
+
+    # Token is opaque or JWT decode failed - validate via userinfo
+    userinfo = validate_opaque_token(token)
+    if userinfo and userinfo.get("sub"):
+        return userinfo
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid token"
+    )
 
 
 def fetch_userinfo(token: str) -> dict:
     """Fetch user info from Zitadel's userinfo endpoint"""
     try:
+        # Use HTTPS for userinfo fetch (Cloudflare redirects http to https)
+        userinfo_url = settings.zitadel_issuer.replace("http://", "https://") + "/oidc/v1/userinfo"
         response = httpx.get(
-            f"{settings.zitadel_issuer}/oidc/v1/userinfo",
+            userinfo_url,
             headers={"Authorization": f"Bearer {token}"},
-            timeout=10
+            timeout=10,
+            follow_redirects=True
         )
         if response.status_code == 200:
             return response.json()

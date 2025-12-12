@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuth } from 'react-oidc-context'
-import { Search, MapPin, Clock, DollarSign, Building2, ChevronLeft, ChevronRight, ChevronUp, SlidersHorizontal, X, Gift, Truck, Award, Calendar, Lock, Crown, RefreshCw, Sparkles, Heart, TrendingUp, Eye, Baby, Loader2, GraduationCap, User, Zap } from 'lucide-react'
+import { Search, MapPin, Clock, DollarSign, Building2, ChevronLeft, ChevronRight, ChevronUp, SlidersHorizontal, X, Gift, Truck, Award, Calendar, Lock, Crown, RefreshCw, Sparkles, Heart, TrendingUp, Eye, Baby, Loader2, GraduationCap, User, Zap, Check } from 'lucide-react'
 import { api } from '../api/client'
 import { toTitleCase } from '../utils/format'
 import { useSubscription, isAdminUnlocked } from '../hooks/useSubscription'
@@ -391,13 +391,7 @@ export default function Jobs() {
           All Jobs
         </button>
         <button
-          onClick={() => {
-            if (!auth.isAuthenticated) {
-              auth.signinRedirect()
-              return
-            }
-            setActiveTab('matched')
-          }}
+          onClick={() => setActiveTab('matched')}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
             activeTab === 'matched'
               ? 'bg-gradient-to-r from-primary-600 to-accent-600 text-white shadow-sm'
@@ -1009,24 +1003,79 @@ export default function Jobs() {
       {/* For You Tab Content */}
       {activeTab === 'matched' && (
         <>
-          {/* Upgrade prompt for non-paid users */}
+          {/* Benefits page for non-paid users (including non-authenticated) */}
           {!isPaidUser ? (
-            <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-              <div className="max-w-md mx-auto">
-                <div className="w-16 h-16 bg-gradient-to-br from-primary-100 to-accent-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Zap className="w-8 h-8 text-primary-600" />
+            <div className="bg-white rounded-xl border border-slate-200 p-12">
+              <div className="max-w-xl mx-auto text-center">
+                <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-accent-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Zap className="w-10 h-10 text-primary-600" />
                 </div>
-                <h2 className="text-2xl font-bold text-slate-900 mb-2">Personalized Job Matches</h2>
-                <p className="text-slate-600 mb-6">
-                  Upgrade to see jobs matched specifically to your nursing specialty, certifications, and preferences.
+                <h2 className="text-3xl font-bold text-slate-900 mb-3">
+                  Save Hours Every Week with Personalized Matches
+                </h2>
+                <p className="text-lg text-slate-600 mb-8 max-w-lg mx-auto">
+                  Stop scrolling through hundreds of irrelevant listings. Get jobs matched to YOUR specialty, location, and preferences delivered directly to you.
                 </p>
-                <Link
-                  to="/billing"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary-600 to-accent-600 text-white rounded-lg font-semibold hover:from-primary-700 hover:to-accent-700 transition-all shadow-lg hover:shadow-xl"
-                >
-                  <Crown className="w-5 h-5" />
-                  Upgrade to Starter - $9/mo
-                </Link>
+
+                {/* Benefits list */}
+                <div className="text-left max-w-md mx-auto mb-8 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Check className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <div>
+                      <span className="font-medium text-slate-900">Matches based on your nursing specialty</span>
+                      <p className="text-sm text-slate-500">ICU, ER, Med/Surg, L&D, NICU, and more</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Check className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <div>
+                      <span className="font-medium text-slate-900">Filters by shift preference and employment type</span>
+                      <p className="text-sm text-slate-500">Day, night, PRN, full-time, travel</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Check className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <div>
+                      <span className="font-medium text-slate-900">Shows jobs near your preferred location</span>
+                      <p className="text-sm text-slate-500">Set your commute radius and we'll handle the rest</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Check className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <div>
+                      <span className="font-medium text-slate-900">See real salary data, not just ranges</span>
+                      <p className="text-sm text-slate-500">Know your worth before you apply</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* CTA Button - different based on auth state */}
+                {auth.isAuthenticated ? (
+                  <Link
+                    to="/billing"
+                    className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-primary-600 to-accent-600 text-white rounded-xl font-semibold hover:from-primary-700 hover:to-accent-700 transition-all shadow-lg hover:shadow-xl text-lg"
+                  >
+                    <Crown className="w-5 h-5" />
+                    Upgrade to Get Matches - $9/mo
+                  </Link>
+                ) : (
+                  <button
+                    onClick={() => auth.signinRedirect()}
+                    className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-primary-600 to-accent-600 text-white rounded-xl font-semibold hover:from-primary-700 hover:to-accent-700 transition-all shadow-lg hover:shadow-xl text-lg"
+                  >
+                    <Sparkles className="w-5 h-5" />
+                    Sign Up to Get Started
+                  </button>
+                )}
+                <p className="text-sm text-slate-400 mt-4">Built by a nurse, for nurses</p>
               </div>
             </div>
           ) : !hasPreferences ? (
