@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Featured Properties | Rob Smith III - Central Virginia Real Estate</title>
+    <meta name="description" content="Browse featured properties from Rob Smith III - farms, estates, land, and country homes in Central Virginia.">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #2d3e2f;
+            --secondary: #4a5d4c;
+            --accent: #8b6914;
+            --warm: #6b4423;
+            --light: #f5f3ef;
+            --dark: #1a1f1a;
+            --gray: #5c6860;
+        }
+
+        body {
+            font-family: Georgia, 'Times New Roman', serif;
+            line-height: 1.6;
+            color: var(--dark);
+        }
+
+        /* Navigation */
+        nav {
+            background: var(--primary);
+            padding: 1rem 5%;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            color: white;
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-decoration: none;
+        }
+
+        .logo span {
+            color: var(--accent);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent);
+        }
+
+        /* Page Header */
+        .page-header {
+            background: linear-gradient(rgba(45, 62, 47, 0.85), rgba(45, 62, 47, 0.9)),
+                        url('https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=1920') center/cover;
+            padding: 10rem 5% 5rem;
+            text-align: center;
+            color: white;
+        }
+
+        .page-header h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            font-weight: normal;
+        }
+
+        .page-header h1 span {
+            color: var(--accent);
+        }
+
+        .page-header p {
+            font-size: 1.2rem;
+            max-width: 600px;
+            margin: 0 auto;
+            opacity: 0.9;
+        }
+
+        /* Featured Property */
+        .featured-property {
+            padding: 4rem 5%;
+            background: var(--light);
+        }
+
+        .featured-badge {
+            display: inline-block;
+            background: var(--accent);
+            color: white;
+            padding: 0.5rem 1.5rem;
+            font-size: 0.9rem;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 2rem;
+        }
+
+        .property-card-large {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+
+        .property-hero {
+            height: 500px;
+            background: linear-gradient(rgba(45, 62, 47, 0.2), rgba(45, 62, 47, 0.4)),
+                        url('images/property-1.webp') center/cover;
+            display: flex;
+            align-items: flex-end;
+            padding: 2rem;
+        }
+
+        .property-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .property-gallery img {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+
+        .property-gallery img:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+        }
+
+        /* Lightbox */
+        .lightbox {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.95);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .lightbox.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .lightbox img {
+            max-width: 90%;
+            max-height: 85%;
+            object-fit: contain;
+            border-radius: 5px;
+            box-shadow: 0 10px 50px rgba(0,0,0,0.5);
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+
+        .lightbox.active img {
+            transform: scale(1);
+        }
+
+        .lightbox-close {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            color: white;
+            font-size: 2.5rem;
+            cursor: pointer;
+            opacity: 0.8;
+            transition: opacity 0.3s, transform 0.3s;
+            z-index: 2001;
+        }
+
+        .lightbox-close:hover {
+            opacity: 1;
+            transform: rotate(90deg);
+        }
+
+        .lightbox-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            color: white;
+            font-size: 3rem;
+            cursor: pointer;
+            opacity: 0.7;
+            transition: opacity 0.3s, transform 0.3s;
+            padding: 1rem;
+            user-select: none;
+        }
+
+        .lightbox-nav:hover {
+            opacity: 1;
+        }
+
+        .lightbox-prev {
+            left: 20px;
+        }
+
+        .lightbox-prev:hover {
+            transform: translateY(-50%) translateX(-5px);
+        }
+
+        .lightbox-next {
+            right: 20px;
+        }
+
+        .lightbox-next:hover {
+            transform: translateY(-50%) translateX(5px);
+        }
+
+        .lightbox-counter {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            font-size: 0.9rem;
+            opacity: 0.7;
+        }
+
+        .property-hero-content {
+            color: white;
+        }
+
+        .property-hero h2 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: normal;
+        }
+
+        .property-hero .location {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .property-details {
+            padding: 3rem;
+        }
+
+        .property-price {
+            font-size: 2.5rem;
+            color: var(--accent);
+            margin-bottom: 1.5rem;
+        }
+
+        .property-stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2rem;
+            margin-bottom: 2rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            color: var(--primary);
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: var(--gray);
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+        }
+
+        .property-description h3 {
+            font-size: 1.5rem;
+            color: var(--primary);
+            margin-bottom: 1rem;
+            font-weight: normal;
+        }
+
+        .property-description p {
+            color: var(--gray);
+            margin-bottom: 1.5rem;
+            line-height: 1.8;
+        }
+
+        .property-features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .feature-category h4 {
+            color: var(--primary);
+            margin-bottom: 0.75rem;
+            font-weight: normal;
+            font-size: 1.1rem;
+            border-bottom: 2px solid var(--accent);
+            padding-bottom: 0.5rem;
+        }
+
+        .feature-category ul {
+            list-style: none;
+        }
+
+        .feature-category li {
+            color: var(--gray);
+            padding: 0.4rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+
+        .feature-category li::before {
+            content: "✓";
+            color: var(--accent);
+            position: absolute;
+            left: 0;
+        }
+
+        .property-location {
+            background: var(--light);
+            padding: 2rem;
+            border-radius: 5px;
+            margin: 2rem 0;
+        }
+
+        .property-location h4 {
+            color: var(--primary);
+            margin-bottom: 1rem;
+            font-weight: normal;
+        }
+
+        .location-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .location-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--gray);
+        }
+
+        .location-item strong {
+            color: var(--primary);
+        }
+
+        .mls-info {
+            font-size: 0.9rem;
+            color: var(--gray);
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid #eee;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 1rem 2.5rem;
+            background: var(--accent);
+            color: white;
+            text-decoration: none;
+            border-radius: 3px;
+            font-weight: bold;
+            transition: transform 0.3s, box-shadow 0.3s;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+
+        .btn-large {
+            padding: 1.25rem 3rem;
+            font-size: 1.1rem;
+        }
+
+        .cta-section {
+            text-align: center;
+            margin-top: 2rem;
+        }
+
+        /* Contact Banner */
+        .contact-banner {
+            background: var(--primary);
+            color: white;
+            padding: 4rem 5%;
+            text-align: center;
+        }
+
+        .contact-banner h2 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            font-weight: normal;
+        }
+
+        .contact-banner p {
+            margin-bottom: 2rem;
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .contact-banner .phone {
+            font-size: 1.8rem;
+            color: var(--accent);
+            margin-bottom: 1.5rem;
+        }
+
+        .contact-banner .phone a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        /* Footer */
+        footer {
+            background: var(--dark);
+            color: white;
+            padding: 2rem 5%;
+            text-align: center;
+        }
+
+        footer p {
+            opacity: 0.8;
+        }
+
+        footer a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        /* Responsive - Tablet */
+        @media (max-width: 1024px) {
+            .page-header {
+                padding: 8rem 5% 4rem;
+            }
+
+            .page-header h1 {
+                font-size: 2.5rem;
+            }
+
+            .property-hero {
+                height: 400px;
+            }
+
+            .property-details {
+                padding: 2rem;
+            }
+
+            .property-gallery {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .property-features {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        /* Responsive - Mobile */
+        @media (max-width: 768px) {
+            nav {
+                padding: 1rem 4%;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .logo {
+                font-size: 1.3rem;
+            }
+
+            .page-header {
+                padding: 7rem 4% 3rem;
+            }
+
+            .page-header h1 {
+                font-size: 2rem;
+            }
+
+            .page-header p {
+                font-size: 1rem;
+            }
+
+            .featured-property {
+                padding: 2rem 4%;
+            }
+
+            .property-hero {
+                height: 280px;
+                padding: 1.5rem;
+            }
+
+            .property-hero h2 {
+                font-size: 1.6rem;
+            }
+
+            .property-hero .location {
+                font-size: 1rem;
+            }
+
+            .featured-badge {
+                padding: 0.4rem 1rem;
+                font-size: 0.8rem;
+                margin-bottom: 1rem;
+            }
+
+            .property-details {
+                padding: 1.5rem;
+            }
+
+            .property-price {
+                font-size: 2rem;
+                margin-bottom: 1rem;
+            }
+
+            .property-stats {
+                gap: 1.5rem;
+                justify-content: flex-start;
+                flex-wrap: wrap;
+            }
+
+            .stat-value {
+                font-size: 1.5rem;
+            }
+
+            .stat-label {
+                font-size: 0.8rem;
+            }
+
+            .property-description h3 {
+                font-size: 1.3rem;
+            }
+
+            .property-description p {
+                font-size: 0.95rem;
+                line-height: 1.7;
+            }
+
+            .property-gallery {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 0.75rem;
+            }
+
+            .property-gallery img {
+                height: 140px;
+            }
+
+            .property-features {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+
+            .feature-category h4 {
+                font-size: 1rem;
+            }
+
+            .feature-category li {
+                font-size: 0.9rem;
+            }
+
+            .property-location {
+                padding: 1.5rem;
+            }
+
+            .location-grid {
+                grid-template-columns: 1fr;
+                gap: 0.75rem;
+            }
+
+            .location-item {
+                font-size: 0.95rem;
+            }
+
+            .btn {
+                padding: 0.9rem 2rem;
+                font-size: 0.95rem;
+            }
+
+            .btn-large {
+                padding: 1rem 2.5rem;
+                font-size: 1rem;
+            }
+
+            .contact-banner {
+                padding: 3rem 4%;
+            }
+
+            .contact-banner h2 {
+                font-size: 1.6rem;
+            }
+
+            .contact-banner p {
+                font-size: 1rem;
+            }
+
+            .contact-banner .phone {
+                font-size: 1.5rem;
+            }
+
+            .contact-banner img {
+                width: 100px !important;
+                height: 100px !important;
+            }
+
+            /* Lightbox Mobile */
+            .lightbox-close {
+                top: 15px;
+                right: 15px;
+                font-size: 2rem;
+            }
+
+            .lightbox-nav {
+                font-size: 2rem;
+                padding: 0.5rem;
+            }
+
+            .lightbox-prev {
+                left: 10px;
+            }
+
+            .lightbox-next {
+                right: 10px;
+            }
+
+            .lightbox img {
+                max-width: 95%;
+                max-height: 75%;
+            }
+
+            footer {
+                padding: 1.5rem 4%;
+            }
+
+            footer p {
+                font-size: 0.9rem;
+            }
+        }
+
+        /* Responsive - Small Mobile */
+        @media (max-width: 480px) {
+            nav {
+                padding: 0.8rem 3%;
+            }
+
+            .logo {
+                font-size: 1.1rem;
+            }
+
+            .page-header {
+                padding: 6rem 3% 2.5rem;
+            }
+
+            .page-header h1 {
+                font-size: 1.6rem;
+            }
+
+            .page-header p {
+                font-size: 0.9rem;
+            }
+
+            .featured-property {
+                padding: 1.5rem 3%;
+            }
+
+            .property-hero {
+                height: 220px;
+                padding: 1rem;
+            }
+
+            .property-hero h2 {
+                font-size: 1.3rem;
+            }
+
+            .property-hero .location {
+                font-size: 0.9rem;
+            }
+
+            .featured-badge {
+                padding: 0.3rem 0.8rem;
+                font-size: 0.7rem;
+            }
+
+            .property-details {
+                padding: 1rem;
+            }
+
+            .property-price {
+                font-size: 1.7rem;
+            }
+
+            .property-stats {
+                gap: 1rem;
+            }
+
+            .stat {
+                min-width: 60px;
+            }
+
+            .stat-value {
+                font-size: 1.3rem;
+            }
+
+            .stat-label {
+                font-size: 0.7rem;
+            }
+
+            .property-description h3 {
+                font-size: 1.15rem;
+            }
+
+            .property-description p {
+                font-size: 0.9rem;
+            }
+
+            .property-gallery {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 0.5rem;
+            }
+
+            .property-gallery img {
+                height: 110px;
+            }
+
+            .feature-category h4 {
+                font-size: 0.95rem;
+            }
+
+            .feature-category li {
+                font-size: 0.85rem;
+                padding: 0.3rem 0;
+            }
+
+            .property-location {
+                padding: 1rem;
+            }
+
+            .property-location h4 {
+                font-size: 1rem;
+            }
+
+            .location-item {
+                font-size: 0.85rem;
+            }
+
+            .mls-info {
+                font-size: 0.8rem;
+            }
+
+            .btn {
+                padding: 0.8rem 1.5rem;
+                font-size: 0.9rem;
+                width: 100%;
+                text-align: center;
+            }
+
+            .btn-large {
+                padding: 0.9rem 2rem;
+            }
+
+            .contact-banner {
+                padding: 2.5rem 3%;
+            }
+
+            .contact-banner h2 {
+                font-size: 1.4rem;
+            }
+
+            .contact-banner p {
+                font-size: 0.9rem;
+            }
+
+            .contact-banner .phone {
+                font-size: 1.3rem;
+            }
+
+            .contact-banner img {
+                width: 80px !important;
+                height: 80px !important;
+            }
+
+            .lightbox-nav {
+                font-size: 1.5rem;
+            }
+
+            .lightbox-close {
+                font-size: 1.8rem;
+            }
+
+            footer p {
+                font-size: 0.8rem;
+            }
+        }
+
+        /* Touch-friendly tap targets */
+        @media (hover: none) and (pointer: coarse) {
+            .property-gallery img {
+                min-height: 120px;
+            }
+
+            .btn {
+                min-height: 48px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .lightbox-nav {
+                padding: 1rem;
+                min-width: 48px;
+                min-height: 48px;
+            }
+
+            .lightbox-close {
+                min-width: 48px;
+                min-height: 48px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="index.html" class="logo">Rob <span>Smith</span></a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="index.html#about">About</a></li>
+            <li><a href="properties.html">Properties</a></li>
+            <li><a href="index.html#contact">Contact</a></li>
+        </ul>
+    </nav>
+
+    <section class="page-header">
+        <h1>Featured <span>Properties</span></h1>
+        <p>Exceptional estates, farms, and country homes in Central Virginia</p>
+    </section>
+
+    <section class="featured-property">
+        <div class="property-card-large">
+            <div class="property-hero">
+                <div class="property-hero-content">
+                    <span class="featured-badge">Featured Listing</span>
+                    <h2>Stronghorus Estate</h2>
+                    <p class="location">14376 Tower Rd, Unionville, VA 22567</p>
+                </div>
+            </div>
+
+            <div class="property-details">
+                <div class="property-price">$2,750,000</div>
+
+                <div class="property-stats">
+                    <div class="stat">
+                        <span class="stat-value">4</span>
+                        <span class="stat-label">Bedrooms</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value">4</span>
+                        <span class="stat-label">Bathrooms</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value">5,616</span>
+                        <span class="stat-label">Sq. Ft.</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value">101+</span>
+                        <span class="stat-label">Acres</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value">6</span>
+                        <span class="stat-label">Stall Stable</span>
+                    </div>
+                </div>
+
+                <div class="property-description">
+                    <h3>French Country Elegance on 101 Acres</h3>
+                    <p>Experience the timeless charm of French Country living blended with refined European elegance at Stronghorus Estate. This magnificent gated property offers over 101 meticulously fenced acres - a private haven for equestrian enthusiasts and those seeking a luxurious rural lifestyle.</p>
+
+                    <p>Originally a modest two-room farmhouse dating back to the late 1800s, this estate has been thoughtfully expanded and transformed over the past 130+ years into the stunning residence you see today. Currently undergoing a comprehensive $300,000 renovation, updates span the primary residence, guest house, pool, detached garage, and 6-stall stable.</p>
+
+                    <p>The property includes a charming 1 bedroom/1 bath guest house, a sparkling 20x50 inground pool, 2-car detached garage, and professional equestrian facilities. With its rich history and modern amenities, Stronghorus Estate represents a rare opportunity to own a piece of Virginia's heritage.</p>
+                </div>
+
+                <div class="property-gallery">
+                    <img src="images/property-1.webp" alt="Stronghorus Estate - Main View">
+                    <img src="images/property-2.webp" alt="Stronghorus Estate - Property View">
+                    <img src="images/property-3.webp" alt="Stronghorus Estate - Grounds">
+                    <img src="images/property-4.webp" alt="Stronghorus Estate - Exterior">
+                    <img src="images/property-5.webp" alt="Stronghorus Estate - Features">
+                    <img src="images/property-6.webp" alt="Stronghorus Estate - Additional View">
+                </div>
+
+                <div class="property-features">
+                    <div class="feature-category">
+                        <h4>Estate Features</h4>
+                        <ul>
+                            <li>Gated entrance</li>
+                            <li>101+ fenced acres</li>
+                            <li>French Country architecture</li>
+                            <li>Historic farmhouse origin (1800s)</li>
+                            <li>$300K renovation in progress</li>
+                            <li>Private & secluded setting</li>
+                        </ul>
+                    </div>
+                    <div class="feature-category">
+                        <h4>Equestrian Amenities</h4>
+                        <ul>
+                            <li>6-stall stable</li>
+                            <li>Meticulously fenced pastures</li>
+                            <li>Riding trails on property</li>
+                            <li>Equestrian-ready facilities</li>
+                        </ul>
+                    </div>
+                    <div class="feature-category">
+                        <h4>Additional Structures</h4>
+                        <ul>
+                            <li>1 BR/1 BA guest house</li>
+                            <li>20x50 inground pool</li>
+                            <li>2-car detached garage</li>
+                            <li>Multiple outbuildings</li>
+                        </ul>
+                    </div>
+                    <div class="feature-category">
+                        <h4>Parking & Access</h4>
+                        <ul>
+                            <li>Circular driveway</li>
+                            <li>Covered parking</li>
+                            <li>Private road access</li>
+                            <li>Secure gated entry</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="property-location">
+                    <h4>Prime Central Virginia Location</h4>
+                    <div class="location-grid">
+                        <div class="location-item"><strong>10 min</strong> to Lake Anna</div>
+                        <div class="location-item"><strong>45 min</strong> to Fredericksburg & I-95</div>
+                        <div class="location-item"><strong>~1 hour</strong> to UVA / Charlottesville</div>
+                        <div class="location-item"><strong>~1 hour</strong> to Richmond</div>
+                        <div class="location-item"><strong>< 2 hours</strong> to Washington, DC</div>
+                        <div class="location-item"><strong>Orange County</strong> Schools</div>
+                    </div>
+                </div>
+
+                <div class="cta-section">
+                    <a href="mailto:rob.smith@c21nm.com" class="btn btn-large">Send Me an Email</a>
+                </div>
+
+                <p class="mls-info">MLS# VAOR2010424 | Orange County, VA | Listed by Rob Smith III, Associate Broker</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="contact-banner">
+        <img src="rob-smith.jpg" alt="Rob Smith III" style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid #8b6914; margin-bottom: 1rem;">
+        <h2>Interested in This Property?</h2>
+        <p>Contact Rob Smith III for more information</p>
+        <div class="phone"><a href="tel:+15408185707">(540) 818-5707</a></div>
+        <a href="mailto:rob.smith@c21nm.com" class="btn">Send an Inquiry</a>
+    </section>
+
+    <footer>
+        <p>&copy; 2025 Rob Smith III, Associate Broker. <a href="index.html">Back to Home</a></p>
+    </footer>
+
+    <!-- Lightbox -->
+    <div class="lightbox" id="lightbox">
+        <span class="lightbox-close" onclick="closeLightbox()">&times;</span>
+        <span class="lightbox-nav lightbox-prev" onclick="changeImage(-1)">&#10094;</span>
+        <img id="lightbox-img" src="" alt="Property Image">
+        <span class="lightbox-nav lightbox-next" onclick="changeImage(1)">&#10095;</span>
+        <div class="lightbox-counter"><span id="lightbox-counter"></span></div>
+    </div>
+
+    <script>
+        // Lightbox functionality
+        const galleryImages = document.querySelectorAll('.property-gallery img');
+        const lightbox = document.getElementById('lightbox');
+        const lightboxImg = document.getElementById('lightbox-img');
+        const lightboxCounter = document.getElementById('lightbox-counter');
+        let currentIndex = 0;
+        const imageUrls = Array.from(galleryImages).map(img => img.src);
+
+        // Open lightbox on image click
+        galleryImages.forEach((img, index) => {
+            img.addEventListener('click', () => {
+                currentIndex = index;
+                openLightbox();
+            });
+        });
+
+        function openLightbox() {
+            lightboxImg.src = imageUrls[currentIndex];
+            lightboxCounter.textContent = `${currentIndex + 1} / ${imageUrls.length}`;
+            lightbox.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeLightbox() {
+            lightbox.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        function changeImage(direction) {
+            currentIndex += direction;
+            if (currentIndex >= imageUrls.length) currentIndex = 0;
+            if (currentIndex < 0) currentIndex = imageUrls.length - 1;
+            lightboxImg.src = imageUrls[currentIndex];
+            lightboxCounter.textContent = `${currentIndex + 1} / ${imageUrls.length}`;
+        }
+
+        // Close on background click
+        lightbox.addEventListener('click', (e) => {
+            if (e.target === lightbox) closeLightbox();
+        });
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (!lightbox.classList.contains('active')) return;
+            if (e.key === 'Escape') closeLightbox();
+            if (e.key === 'ArrowRight') changeImage(1);
+            if (e.key === 'ArrowLeft') changeImage(-1);
+        });
+
+        // Smooth scroll for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

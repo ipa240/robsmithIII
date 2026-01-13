@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rob Smith III | Central Virginia Real Estate - Farms, Land & Country Homes</title>
+    <meta name="description" content="Rob Smith III - Associate Broker with 30+ years experience in Central Virginia real estate. Specializing in farms, land, country homes, and commercial properties.">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #2d3e2f;
+            --secondary: #4a5d4c;
+            --accent: #8b6914;
+            --warm: #6b4423;
+            --light: #f5f3ef;
+            --dark: #1a1f1a;
+            --gray: #5c6860;
+        }
+
+        body {
+            font-family: Georgia, 'Times New Roman', serif;
+            line-height: 1.6;
+            color: var(--dark);
+        }
+
+        /* Navigation */
+        nav {
+            background: var(--primary);
+            padding: 1rem 5%;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            color: white;
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-decoration: none;
+        }
+
+        .logo span {
+            color: var(--accent);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent);
+        }
+
+        /* Hero Section */
+        .hero {
+            background: linear-gradient(rgba(45, 62, 47, 0.75), rgba(45, 62, 47, 0.8)),
+                        url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1920') center/cover;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: white;
+            padding: 0 5%;
+        }
+
+        .hero-content h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            font-weight: normal;
+        }
+
+        .hero-content h1 span {
+            color: var(--accent);
+        }
+
+        .hero-content .tagline {
+            font-size: 1.4rem;
+            margin-bottom: 0.5rem;
+            font-style: italic;
+            opacity: 0.95;
+        }
+
+        .hero-content p {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            max-width: 650px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 1rem 2.5rem;
+            background: var(--accent);
+            color: white;
+            text-decoration: none;
+            border-radius: 3px;
+            font-weight: bold;
+            transition: transform 0.3s, box-shadow 0.3s;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+
+        /* About Section */
+        .about {
+            padding: 5rem 5%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto;
+            background: var(--light);
+        }
+
+        .about-image {
+            width: 100%;
+            height: 400px;
+            border-radius: 5px;
+            border: 4px solid var(--warm);
+            overflow: hidden;
+        }
+
+        .about-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .about-content h2 {
+            font-size: 2.5rem;
+            color: var(--primary);
+            margin-bottom: 1rem;
+            font-weight: normal;
+        }
+
+        .about-content h2 span {
+            color: var(--accent);
+        }
+
+        .about-content p {
+            color: var(--gray);
+            margin-bottom: 1.5rem;
+        }
+
+        .credentials {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .credential-tag {
+            background: var(--primary);
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 3px;
+            font-size: 0.85rem;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+        }
+
+        /* Services Section */
+        .services {
+            background: white;
+            padding: 5rem 5%;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            color: var(--primary);
+            margin-bottom: 3rem;
+            font-weight: normal;
+        }
+
+        .section-title span {
+            color: var(--accent);
+        }
+
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .service-card {
+            background: var(--light);
+            padding: 2.5rem;
+            border-radius: 5px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            transition: transform 0.3s;
+            border-bottom: 3px solid var(--accent);
+        }
+
+        .service-card:hover {
+            transform: translateY(-10px);
+        }
+
+        .service-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .service-card h3 {
+            color: var(--primary);
+            margin-bottom: 1rem;
+            font-weight: normal;
+            font-size: 1.4rem;
+        }
+
+        .service-card p {
+            color: var(--gray);
+        }
+
+        /* Featured Property Section */
+        .featured-property {
+            padding: 5rem 5%;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+        }
+
+        .featured-property .section-title {
+            color: white;
+        }
+
+        .featured-property .section-title span {
+            color: var(--accent);
+        }
+
+        .featured-card {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+        }
+
+        .featured-card-image {
+            background: linear-gradient(rgba(45, 62, 47, 0.1), rgba(45, 62, 47, 0.2)),
+                        url('images/property-1.webp') center/cover;
+            min-height: 400px;
+            position: relative;
+        }
+
+        .featured-badge {
+            position: absolute;
+            top: 1.5rem;
+            left: 1.5rem;
+            background: var(--accent);
+            color: white;
+            padding: 0.5rem 1rem;
+            font-size: 0.85rem;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .featured-card-content {
+            padding: 2.5rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .featured-card-content h3 {
+            font-size: 1.8rem;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+            font-weight: normal;
+        }
+
+        .featured-card-content .location {
+            color: var(--gray);
+            margin-bottom: 1rem;
+        }
+
+        .featured-card-content .price {
+            font-size: 2rem;
+            color: var(--accent);
+            margin-bottom: 1.5rem;
+        }
+
+        .featured-stats {
+            display: flex;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .featured-stat {
+            text-align: center;
+        }
+
+        .featured-stat-value {
+            display: block;
+            font-size: 1.4rem;
+            color: var(--primary);
+        }
+
+        .featured-stat-label {
+            font-size: 0.8rem;
+            color: var(--gray);
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+        }
+
+        .featured-card-content p {
+            color: var(--gray);
+            margin-bottom: 1.5rem;
+            line-height: 1.7;
+        }
+
+        @media (max-width: 900px) {
+            .featured-card {
+                grid-template-columns: 1fr;
+            }
+
+            .featured-card-image {
+                min-height: 250px;
+            }
+        }
+
+        /* Testimonials Section */
+        .testimonials {
+            background: var(--light);
+            padding: 5rem 5%;
+        }
+
+        .testimonials-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1.5rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .testimonial-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 5px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            border-left: 4px solid var(--accent);
+        }
+
+        .testimonial-card p {
+            color: var(--gray);
+            font-style: italic;
+            margin-bottom: 1rem;
+            line-height: 1.8;
+        }
+
+        .testimonial-card .client {
+            color: var(--primary);
+            font-weight: bold;
+            font-style: normal;
+        }
+
+        .quote-mark {
+            font-size: 3rem;
+            color: var(--accent);
+            opacity: 0.3;
+            line-height: 1;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Areas Section */
+        .areas {
+            background: var(--secondary);
+            padding: 4rem 5%;
+            color: white;
+            text-align: center;
+        }
+
+        .areas h2 {
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+            font-weight: normal;
+        }
+
+        .areas p {
+            max-width: 800px;
+            margin: 0 auto 1rem;
+            opacity: 0.95;
+            font-size: 1.1rem;
+        }
+
+        .area-list {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .area-tag {
+            background: rgba(255,255,255,0.15);
+            padding: 0.5rem 1.2rem;
+            border-radius: 3px;
+            font-size: 0.95rem;
+        }
+
+        /* Stats Section */
+        .stats {
+            background: var(--primary);
+            padding: 4rem 5%;
+            color: white;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 2rem;
+            max-width: 1000px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .stat-item h3 {
+            font-size: 3rem;
+            color: var(--accent);
+            font-weight: normal;
+        }
+
+        .stat-item p {
+            font-size: 1.1rem;
+        }
+
+        /* Contact Section */
+        .contact {
+            padding: 5rem 5%;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .contact-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .contact-item {
+            text-align: center;
+            padding: 2rem;
+            background: var(--light);
+            border-radius: 5px;
+        }
+
+        .contact-item h3 {
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .contact-item p {
+            color: var(--gray);
+        }
+
+        .contact-item a {
+            color: var(--warm);
+            text-decoration: none;
+        }
+
+        /* Footer */
+        footer {
+            background: var(--dark);
+            color: white;
+            padding: 2rem 5%;
+            text-align: center;
+        }
+
+        footer p {
+            opacity: 0.8;
+        }
+
+        /* Responsive - Tablet */
+        @media (max-width: 1024px) {
+            .about {
+                gap: 2rem;
+            }
+
+            .featured-card {
+                grid-template-columns: 1fr;
+            }
+
+            .featured-card-image {
+                min-height: 300px;
+            }
+        }
+
+        /* Responsive - Mobile */
+        @media (max-width: 768px) {
+            nav {
+                padding: 0.8rem 4%;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .logo {
+                font-size: 1.3rem;
+            }
+
+            .hero {
+                padding: 0 4%;
+                min-height: 90vh;
+            }
+
+            .hero-content h1 {
+                font-size: 2.2rem;
+                line-height: 1.2;
+            }
+
+            .hero-content .tagline {
+                font-size: 1.1rem;
+            }
+
+            .hero-content p {
+                font-size: 1rem;
+            }
+
+            .section-title {
+                font-size: 1.8rem;
+                padding: 0 1rem;
+            }
+
+            .about {
+                grid-template-columns: 1fr;
+                padding: 3rem 4%;
+                gap: 2rem;
+            }
+
+            .about-image {
+                height: 280px;
+            }
+
+            .about-content h2 {
+                font-size: 1.8rem;
+            }
+
+            .about-content p {
+                font-size: 0.95rem;
+            }
+
+            .credentials {
+                justify-content: center;
+            }
+
+            .credential-tag {
+                font-size: 0.75rem;
+                padding: 0.25rem 0.6rem;
+            }
+
+            .services {
+                padding: 3rem 4%;
+            }
+
+            .services-grid {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+
+            .service-card {
+                padding: 1.5rem;
+            }
+
+            .featured-property {
+                padding: 3rem 4%;
+            }
+
+            .featured-card {
+                grid-template-columns: 1fr;
+            }
+
+            .featured-card-image {
+                min-height: 220px;
+            }
+
+            .featured-card-content {
+                padding: 1.5rem;
+            }
+
+            .featured-card-content h3 {
+                font-size: 1.4rem;
+            }
+
+            .featured-card-content .price {
+                font-size: 1.6rem;
+            }
+
+            .featured-stats {
+                gap: 1rem;
+            }
+
+            .testimonials {
+                padding: 3rem 4%;
+            }
+
+            .testimonials-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .testimonial-card {
+                padding: 1.5rem;
+            }
+
+            .areas {
+                padding: 3rem 4%;
+            }
+
+            .areas h2 {
+                font-size: 1.6rem;
+            }
+
+            .area-list {
+                gap: 0.5rem;
+            }
+
+            .area-tag {
+                font-size: 0.85rem;
+                padding: 0.4rem 0.8rem;
+            }
+
+            .stats {
+                padding: 3rem 4%;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 1.5rem;
+            }
+
+            .stat-item h3 {
+                font-size: 2rem;
+            }
+
+            .stat-item p {
+                font-size: 0.9rem;
+            }
+
+            .contact {
+                padding: 3rem 4%;
+            }
+
+            .contact-info {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+
+            .contact-item {
+                padding: 1.5rem;
+            }
+
+            .btn {
+                padding: 0.9rem 2rem;
+                font-size: 0.95rem;
+            }
+
+            footer {
+                padding: 1.5rem 4%;
+            }
+        }
+
+        /* Responsive - Small Mobile */
+        @media (max-width: 480px) {
+            .hero-content h1 {
+                font-size: 1.8rem;
+            }
+
+            .hero-content .tagline {
+                font-size: 1rem;
+            }
+
+            .section-title {
+                font-size: 1.5rem;
+            }
+
+            .about-content h2 {
+                font-size: 1.5rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 1rem;
+            }
+
+            .stat-item h3 {
+                font-size: 1.6rem;
+            }
+
+            .featured-card-content h3 {
+                font-size: 1.2rem;
+            }
+
+            .featured-card-content .price {
+                font-size: 1.4rem;
+            }
+
+            .featured-stat-value {
+                font-size: 1.1rem;
+            }
+        }
+
+        /* Scroll Animations */
+        .fade-in {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+
+        .fade-in.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .slide-in-left {
+            opacity: 0;
+            transform: translateX(-50px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+
+        .slide-in-left.visible {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .slide-in-right {
+            opacity: 0;
+            transform: translateX(50px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+
+        .slide-in-right.visible {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        /* Enhanced button hover */
+        .btn {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: rgba(255,255,255,0.2);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .btn:hover::after {
+            width: 300px;
+            height: 300px;
+        }
+
+        /* Enhanced card hover */
+        .service-card, .testimonial-card {
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .service-card:hover, .testimonial-card:hover {
+            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+        }
+
+        /* Stat counter animation */
+        .stat-item h3 {
+            transition: transform 0.3s;
+        }
+
+        .stat-item:hover h3 {
+            transform: scale(1.1);
+        }
+
+        /* Area tag hover */
+        .area-tag {
+            transition: background 0.3s, transform 0.3s;
+        }
+
+        .area-tag:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateY(-2px);
+        }
+
+        /* Credential tag hover */
+        .credential-tag {
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .credential-tag:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="#" class="logo">Rob <span>Smith</span></a>
+        <ul class="nav-links">
+            <li><a href="#about">About</a></li>
+            <li><a href="properties.html">Properties</a></li>
+            <li><a href="#testimonials">Testimonials</a></li>
+            <li><a href="#contact">Contact</a></li>
+        </ul>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-content">
+            <p class="tagline">Associate Broker - 30+ Years Experience</p>
+            <h1>Find Your <span>Country Home</span></h1>
+            <p>From rolling farmland to charming country homes, I've spent three decades helping families find their perfect piece of Virginia. Let me guide you home.</p>
+            <a href="#contact" class="btn">Let's Talk</a>
+        </div>
+    </section>
+
+    <section class="about" id="about">
+        <div class="about-image"><img src="rob-smith.jpg" alt="Rob Smith III - Central Virginia Real Estate Agent"></div>
+        <div class="about-content">
+            <h2>Meet <span>Rob Smith III</span></h2>
+            <p>With over 30 years in real estate, I've built my career on one simple principle: putting my clients first. Originally licensed in Georgia in 1999, I earned my Broker's License in 2004 and became a Lifetime Member of the Million Dollar Council for surpassing $5 million in sales. Most recently, I was recognized as a Masters Ruby Producer in 2024.</p>
+            <p>I moved to Virginia in 2010 and quickly fell in love with the land and the people. Since then, I've served as Managing Broker, Property Manager, Sales Manager, and Team Leader across Central and Northern Virginia, as well as Washington, D.C. During the 2008-2010 foreclosure crisis, I served as a preferred broker for major lenders including Countrywide, Bank of America, and JP Morgan Chase, successfully closing over 300 REO properties.</p>
+            <p>My understanding of architecture and interior design helps buyers see a property's true potential - often identifying opportunities others miss. When I'm not helping clients, you'll find me at my family's vineyard and brewery in Spotsylvania with my Jack Russell, Bailey. A portion of every commission goes to Children's Miracle Network on behalf of the Miss Virginia Scholarship Organization.</p>
+            <div class="credentials">
+                <span class="credential-tag">Associate Broker</span>
+                <span class="credential-tag">REALTOR®</span>
+                <span class="credential-tag">SFR® Certified</span>
+                <span class="credential-tag">Commercial Specialist</span>
+                <span class="credential-tag">At Home With Diversity</span>
+                <span class="credential-tag">Masters Ruby 2024</span>
+            </div>
+            <a href="#contact" class="btn">Work With Me</a>
+        </div>
+    </section>
+
+    <section class="services" id="services">
+        <h2 class="section-title">What I <span>Specialize In</span></h2>
+        <div class="services-grid">
+            <div class="service-card">
+                <div class="service-icon">&#127806;</div>
+                <h3>Farms & Acreage</h3>
+                <p>Working farms, horse properties, and large acreage tracts. I'll help you find productive land with the features you need.</p>
+            </div>
+            <div class="service-card">
+                <div class="service-icon">&#127968;</div>
+                <h3>Country Homes</h3>
+                <p>From historic farmhouses to modern country retreats, find the perfect home surrounded by Virginia's natural beauty.</p>
+            </div>
+            <div class="service-card">
+                <div class="service-icon">&#127795;</div>
+                <h3>Land & Lots</h3>
+                <p>Build your dream on raw land. I know the terrain, zoning, and what to look for in a quality building site.</p>
+            </div>
+            <div class="service-card">
+                <div class="service-icon">&#128176;</div>
+                <h3>Commercial Properties</h3>
+                <p>As a certified Commercial Specialist, I handle business properties, investment opportunities, and commercial land sales.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="featured-property" id="featured">
+        <h2 class="section-title">Featured <span>Listing</span></h2>
+        <div class="featured-card">
+            <div class="featured-card-image">
+                <span class="featured-badge">Just Listed</span>
+            </div>
+            <div class="featured-card-content">
+                <h3>Stronghorus Estate</h3>
+                <p class="location">14376 Tower Rd, Unionville, VA 22567</p>
+                <div class="price">$2,750,000</div>
+                <div class="featured-stats">
+                    <div class="featured-stat">
+                        <span class="featured-stat-value">4</span>
+                        <span class="featured-stat-label">Beds</span>
+                    </div>
+                    <div class="featured-stat">
+                        <span class="featured-stat-value">4</span>
+                        <span class="featured-stat-label">Baths</span>
+                    </div>
+                    <div class="featured-stat">
+                        <span class="featured-stat-value">5,616</span>
+                        <span class="featured-stat-label">Sq Ft</span>
+                    </div>
+                    <div class="featured-stat">
+                        <span class="featured-stat-value">101+</span>
+                        <span class="featured-stat-label">Acres</span>
+                    </div>
+                </div>
+                <p>French Country elegance on 101+ fenced acres. Gated estate with 6-stall stable, guest house, pool, and $300K renovation in progress. 10 min to Lake Anna, under 2 hours to DC.</p>
+                <a href="properties.html" class="btn">View Property Details</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="testimonials" id="testimonials">
+        <h2 class="section-title">What My <span>Clients Say</span></h2>
+        <div class="testimonials-grid">
+            <div class="testimonial-card">
+                <div class="quote-mark">"</div>
+                <p>This was my first experience working with John (Rob) Smith. This was also the first time I had to deal with buying property...</p>
+                <p class="client">- D. Bridge, Locust Grove, VA</p>
+            </div>
+            <div class="testimonial-card">
+                <div class="quote-mark">"</div>
+                <p>I feel fortunate to have worked with Rob Smith, having chosen him to represent me in the sale of my rental property townhouse...</p>
+                <p class="client">- Timothy Lowe, Arlington, VA</p>
+            </div>
+            <div class="testimonial-card">
+                <div class="quote-mark">"</div>
+                <p>Rob made the process of selling my house simple. He kept me apprised of every step, made sure I understood every transaction...</p>
+                <p class="client">- Len Clark, Manassas, VA</p>
+            </div>
+            <div class="testimonial-card">
+                <div class="quote-mark">"</div>
+                <p>Another great job on this sale. Sold above asking and juggling multiple showings and offers like the pro that Rob Smith is!</p>
+                <p class="client">- Rod, Orange, VA</p>
+            </div>
+            <div class="testimonial-card">
+                <div class="quote-mark">"</div>
+                <p>Difficult time made easy with Rob Smith III as our realtor. Selling your parent's home is an overwhelming and difficult process...</p>
+                <p class="client">- Pamela Wilcox, Orange, VA</p>
+            </div>
+            <div class="testimonial-card">
+                <div class="quote-mark">"</div>
+                <p>Rob was fantastic! We were out of state buyers and Rob helped facilitate everything for us. He is professional, personable...</p>
+                <p class="client">- Sam Shafer, Miami, FL</p>
+            </div>
+            <div class="testimonial-card">
+                <div class="quote-mark">"</div>
+                <p>I had to sell my home due to life change circumstances. Rob Smith was very kind and compassionate towards my situation...</p>
+                <p class="client">- Tonia Johnson</p>
+            </div>
+            <div class="testimonial-card">
+                <div class="quote-mark">"</div>
+                <p>Rob did a really good job on our home purchase. He helped us find a home we love in a tough market. He knows the area...</p>
+                <p class="client">- Tom F.</p>
+            </div>
+            <div class="testimonial-card">
+                <div class="quote-mark">"</div>
+                <p>Rob has managed rental properties for me and helped me buy and sell homes. He is an expert in the real estate market...</p>
+                <p class="client">- Verified Client</p>
+            </div>
+            <div class="testimonial-card">
+                <div class="quote-mark">"</div>
+                <p>The best real estate agent, but in the end a much better friend. I could not have asked nor found a more kind and caring...</p>
+                <p class="client">- Verified Client</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="areas" id="areas">
+        <h2>Serving Central Virginia</h2>
+        <p>I know these counties like the back of my hand - from Fredericksburg to the Blue Ridge foothills.</p>
+        <div class="area-list">
+            <span class="area-tag">Fredericksburg</span>
+            <span class="area-tag">Spotsylvania County</span>
+            <span class="area-tag">Stafford County</span>
+            <span class="area-tag">Orange County</span>
+            <span class="area-tag">Culpeper County</span>
+            <span class="area-tag">Louisa County</span>
+            <span class="area-tag">Caroline County</span>
+            <span class="area-tag">King George County</span>
+        </div>
+    </section>
+
+    <section class="stats">
+        <div class="stats-grid">
+            <div class="stat-item">
+                <h3>30+</h3>
+                <p>Years Experience</p>
+            </div>
+            <div class="stat-item">
+                <h3>300+</h3>
+                <p>Properties Sold</p>
+            </div>
+            <div class="stat-item">
+                <h3>$5M+</h3>
+                <p>Million Dollar Council</p>
+            </div>
+            <div class="stat-item">
+                <h3>24/7</h3>
+                <p>Always Available</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="contact" id="contact">
+        <h2 class="section-title">Get In <span>Touch</span></h2>
+        <div class="contact-info">
+            <div class="contact-item">
+                <h3>Mobile</h3>
+                <p><a href="tel:+15408185707">(540) 818-5707</a></p>
+            </div>
+            <div class="contact-item">
+                <h3>Email</h3>
+                <p><a href="mailto:rob.smith@c21nm.com">rob.smith@c21nm.com</a></p>
+            </div>
+            <div class="contact-item">
+                <h3>Office</h3>
+                <p>1931 Plank Road, Suite 201<br>Fredericksburg, VA 22401</p>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <p>&copy; 2025 Rob Smith III, Associate Broker. Proudly serving Central Virginia.</p>
+    </footer>
+
+    <script>
+        // Scroll Animation with Intersection Observer
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, observerOptions);
+
+        // Add animation classes and observe elements
+        document.querySelectorAll('.service-card').forEach((el, i) => {
+            el.classList.add('fade-in');
+            el.style.transitionDelay = `${i * 0.1}s`;
+            observer.observe(el);
+        });
+
+        document.querySelectorAll('.testimonial-card').forEach((el, i) => {
+            el.classList.add('fade-in');
+            el.style.transitionDelay = `${i * 0.1}s`;
+            observer.observe(el);
+        });
+
+        document.querySelectorAll('.stat-item').forEach((el, i) => {
+            el.classList.add('fade-in');
+            el.style.transitionDelay = `${i * 0.1}s`;
+            observer.observe(el);
+        });
+
+        document.querySelectorAll('.contact-item').forEach((el, i) => {
+            el.classList.add('fade-in');
+            el.style.transitionDelay = `${i * 0.1}s`;
+            observer.observe(el);
+        });
+
+        // About section animations
+        const aboutImage = document.querySelector('.about-image');
+        const aboutContent = document.querySelector('.about-content');
+        if (aboutImage) {
+            aboutImage.classList.add('slide-in-left');
+            observer.observe(aboutImage);
+        }
+        if (aboutContent) {
+            aboutContent.classList.add('slide-in-right');
+            observer.observe(aboutContent);
+        }
+
+        // Featured card animation
+        const featuredCard = document.querySelector('.featured-card');
+        if (featuredCard) {
+            featuredCard.classList.add('fade-in');
+            observer.observe(featuredCard);
+        }
+
+        // Smooth scroll for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                const href = this.getAttribute('href');
+                if (href === '#') return;
+                e.preventDefault();
+                const target = document.querySelector(href);
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+
+        // Parallax effect on hero
+        window.addEventListener('scroll', () => {
+            const hero = document.querySelector('.hero');
+            if (hero) {
+                const scrolled = window.pageYOffset;
+                hero.style.backgroundPositionY = `${scrolled * 0.5}px`;
+            }
+        });
+    </script>
+</body>
+</html>
