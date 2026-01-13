@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from 'react-oidc-context'
 import { Search, MapPin, Clock, DollarSign, Building2, ChevronLeft, ChevronRight, ChevronUp, SlidersHorizontal, X, Gift, Truck, Award, Calendar, Lock, Crown, RefreshCw, Sparkles, Heart, TrendingUp, Eye, Baby, Loader2, GraduationCap, User, Zap, Check } from 'lucide-react'
 import { api } from '../api/client'
 import { toTitleCase } from '../utils/format'
 import { useSubscription, isAdminUnlocked } from '../hooks/useSubscription'
 import JobPreviewDrawer from '../components/JobPreviewDrawer'
+import { SEO } from '../components/SEO'
 
 // Format employment types for display: full_time -> "Full Time"
 const formatEmploymentType = (type: string): string => {
@@ -93,38 +94,79 @@ export default function Jobs() {
   // Paid users OR admin unlocked can see all grades
   const isPaidUser = (auth.isAuthenticated && isPaid) || isAdminUnlocked()
 
-  // Tab state: 'all' for regular jobs, 'matched' for personalized matches
-  const [activeTab, setActiveTab] = useState<'all' | 'matched'>('all')
+  // URL search params for filter persistence
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const [search, setSearch] = useState('')
-  const [showFilters, setShowFilters] = useState(false)
-  const [filters, setFilters] = useState({
-    nursing_type: '',
-    specialty: '',
-    employment_type: '',
-    shift_type: '',
-    region: '',
-    facility_system: '',
-    facility_id: '',
-    childcare: '',
-    ofs_grade: '',
-    posted_within_days: '',
-    min_pay: '',
-    max_pay: '',
-    has_sign_on_bonus: false,
-    has_relocation: false,
-    pay_disclosed_only: false,
-    // New enrichment-based filters
-    new_grad_friendly: false,
-    bsn_required: '',  // 'yes', 'no', or ''
-    certification: '',  // 'ACLS', 'BLS', 'PALS', etc.
-    exclude_nursing_homes: true,  // Default to excluding nursing homes
+  // Helper to parse URL params into filter state
+  const getInitialFilters = () => ({
+    nursing_type: searchParams.get('nursing_type') || '',
+    specialty: searchParams.get('specialty') || '',
+    employment_type: searchParams.get('employment_type') || '',
+    shift_type: searchParams.get('shift_type') || '',
+    region: searchParams.get('region') || '',
+    facility_system: searchParams.get('facility_system') || '',
+    facility_id: searchParams.get('facility_id') || '',
+    childcare: searchParams.get('childcare') || '',
+    ofs_grade: searchParams.get('ofs_grade') || '',
+    posted_within_days: searchParams.get('posted_within_days') || '',
+    min_pay: searchParams.get('min_pay') || '',
+    max_pay: searchParams.get('max_pay') || '',
+    has_sign_on_bonus: searchParams.get('has_sign_on_bonus') === 'true',
+    has_relocation: searchParams.get('has_relocation') === 'true',
+    pay_disclosed_only: searchParams.get('pay_disclosed_only') === 'true',
+    new_grad_friendly: searchParams.get('new_grad_friendly') === 'true',
+    bsn_required: searchParams.get('bsn_required') || '',
+    certification: searchParams.get('certification') || '',
+    exclude_nursing_homes: searchParams.get('exclude_nursing_homes') !== 'false',  // Default true unless explicitly false
   })
 
+  // Tab state: 'all' for regular jobs, 'matched' for personalized matches
+  const [activeTab, setActiveTab] = useState<'all' | 'matched'>(searchParams.get('tab') as 'all' | 'matched' || 'all')
+
+  const [search, setSearch] = useState(searchParams.get('q') || '')
+  const [showFilters, setShowFilters] = useState(false)
+  const [filters, setFilters] = useState(getInitialFilters)
+
   // Distance/location state
-  const [distanceMode, setDistanceMode] = useState<'none' | 'profile' | 'custom'>('none')
-  const [customZip, setCustomZip] = useState('')
-  const [maxDistance, setMaxDistance] = useState<string>('')
+  const [distanceMode, setDistanceMode] = useState<'none' | 'profile' | 'custom'>(
+    (searchParams.get('distance_mode') as 'none' | 'profile' | 'custom') || 'none'
+  )
+  const [customZip, setCustomZip] = useState(searchParams.get('zip') || '')
+  const [maxDistance, setMaxDistance] = useState<string>(searchParams.get('max_distance') || '')
+
+  // Sync state to URL params when filters change
+  useEffect(() => {
+    const params = new URLSearchParams()
+
+    // Only add non-default values to keep URL clean
+    if (search) params.set('q', search)
+    if (activeTab !== 'all') params.set('tab', activeTab)
+    if (filters.nursing_type) params.set('nursing_type', filters.nursing_type)
+    if (filters.specialty) params.set('specialty', filters.specialty)
+    if (filters.employment_type) params.set('employment_type', filters.employment_type)
+    if (filters.shift_type) params.set('shift_type', filters.shift_type)
+    if (filters.region) params.set('region', filters.region)
+    if (filters.facility_system) params.set('facility_system', filters.facility_system)
+    if (filters.facility_id) params.set('facility_id', filters.facility_id)
+    if (filters.childcare) params.set('childcare', filters.childcare)
+    if (filters.ofs_grade) params.set('ofs_grade', filters.ofs_grade)
+    if (filters.posted_within_days) params.set('posted_within_days', filters.posted_within_days)
+    if (filters.min_pay) params.set('min_pay', filters.min_pay)
+    if (filters.max_pay) params.set('max_pay', filters.max_pay)
+    if (filters.has_sign_on_bonus) params.set('has_sign_on_bonus', 'true')
+    if (filters.has_relocation) params.set('has_relocation', 'true')
+    if (filters.pay_disclosed_only) params.set('pay_disclosed_only', 'true')
+    if (filters.new_grad_friendly) params.set('new_grad_friendly', 'true')
+    if (filters.bsn_required) params.set('bsn_required', filters.bsn_required)
+    if (filters.certification) params.set('certification', filters.certification)
+    if (!filters.exclude_nursing_homes) params.set('exclude_nursing_homes', 'false')  // Only set if false
+    if (distanceMode !== 'none') params.set('distance_mode', distanceMode)
+    if (customZip) params.set('zip', customZip)
+    if (maxDistance) params.set('max_distance', maxDistance)
+
+    // Use replace to avoid adding to history for every filter change
+    setSearchParams(params, { replace: true })
+  }, [search, activeTab, filters, distanceMode, customZip, maxDistance, setSearchParams])
 
   const [selectedJob, setSelectedJob] = useState<any>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -236,6 +278,8 @@ export default function Jobs() {
     setCustomZip('')
     setMaxDistance('')
     setCurrentPage(1)
+    // Clear URL params (the useEffect will handle this, but we clear to get a clean URL)
+    setSearchParams({}, { replace: true })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -350,6 +394,18 @@ export default function Jobs() {
 
   return (
     <div className="space-y-6">
+      <SEO
+        title="Browse Travel Nursing Jobs"
+        description="Search thousands of travel nursing jobs across Virginia. Filter by specialty, location, pay rate, and more. Find your next nursing assignment today."
+        canonical="https://vanurses.net/jobs"
+        schema={{
+          '@context': 'https://schema.org',
+          '@type': 'ItemList',
+          name: 'Travel Nursing Jobs',
+          description: 'Browse nursing job listings',
+          url: 'https://vanurses.net/jobs',
+        }}
+      />
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">Nursing Jobs</h1>

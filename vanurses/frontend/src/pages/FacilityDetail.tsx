@@ -12,6 +12,7 @@ import IndexBreakdown from '../components/scoring/IndexBreakdown'
 import JTICard from '../components/scoring/JTICard'
 import FacilityAnalytics from '../components/FacilityAnalytics'
 import { NoFilterUnlockModal, NOFILTER_STORAGE_KEY, lockNoFilter } from '../components/NoFilterUnlockModal'
+import { FacilitySEO } from '../components/SEO'
 
 // Sully moods with labels and colors
 const SULLY_MOODS = [
@@ -259,6 +260,13 @@ export default function FacilityDetail() {
 
   return (
     <div className="max-w-5xl mx-auto">
+      <FacilitySEO
+        name={facility.name}
+        city={facility.city}
+        state={facility.state}
+        grade={facility.score?.ofs_grade}
+        facilityId={id || ''}
+      />
       <Link
         to="/facilities"
         className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-6"

@@ -1,6 +1,13 @@
+import { SEO } from '../components/SEO'
+
 export default function Privacy() {
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
+      <SEO
+        title="Privacy Policy"
+        description="VANurses Privacy Policy. Learn how we collect, use, and protect your personal information on our nursing job platform."
+        canonical="https://vanurses.net/privacy"
+      />
       <h1 className="text-3xl font-bold text-slate-900 mb-6">Privacy Policy</h1>
       <p className="text-sm text-slate-500 mb-8">Last Updated: December 7, 2025</p>
 

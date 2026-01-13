@@ -6,6 +6,7 @@ import { api, setAuthToken } from '../api/client'
 import { useEffect } from 'react'
 import { useSubscription } from '../hooks/useSubscription'
 import { isAdminUnlocked } from '../hooks/useSubscription'
+import { SEO } from '../components/SEO'
 
 // Demo saved jobs for non-authenticated users
 const DEMO_SAVED_JOBS = [
@@ -38,6 +39,11 @@ export default function SavedJobs() {
   if (!auth.isAuthenticated && !isAdminUnlocked()) {
     return (
       <div className="space-y-6">
+        <SEO
+          title="Saved Jobs"
+          description="View and manage your saved nursing jobs on VANurses. Track positions you're interested in and apply when ready."
+          canonical="https://vanurses.net/saved"
+        />
         <div>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">Saved Jobs</h1>
           <p className="text-slate-600">Keep track of jobs you're interested in</p>
@@ -148,6 +154,11 @@ export default function SavedJobs() {
 
   return (
     <div className="space-y-6">
+      <SEO
+        title="Saved Jobs"
+        description="View and manage your saved nursing jobs on VANurses. Track positions you're interested in and apply when ready."
+        canonical="https://vanurses.net/saved"
+      />
       <div>
         <h1 className="text-3xl font-bold text-slate-900 mb-2">Saved Jobs</h1>
         <p className="text-slate-600">

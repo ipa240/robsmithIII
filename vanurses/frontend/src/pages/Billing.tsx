@@ -4,10 +4,11 @@ import { useSearchParams } from 'react-router-dom'
 import {
   CreditCard, Check, Zap, Crown, Building2,
   Clock, Star, ArrowRight, Package, History,
-  CheckCircle, XCircle, ExternalLink, Heart
+  CheckCircle, XCircle, ExternalLink, Heart, Tag, ChevronDown
 } from 'lucide-react'
 import { useAuth } from 'react-oidc-context'
 import { api, setAuthToken } from '../api/client'
+import { SEO } from '../components/SEO'
 
 interface Tier {
   id: string
@@ -67,6 +68,8 @@ export default function Billing() {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false)
   const [showCancelMessage, setShowCancelMessage] = useState(false)
   const [autoCheckoutTier, setAutoCheckoutTier] = useState<string | null>(null)
+  const [showCouponInput, setShowCouponInput] = useState(false)
+  const [couponCode, setCouponCode] = useState('')
   const queryClient = useQueryClient()
   const auth = useAuth()
 
@@ -140,18 +143,26 @@ export default function Billing() {
   })
 
   const checkoutMutation = useMutation({
-    mutationFn: (data: { tier: string; billing_period: string }) =>
+    mutationFn: (data: { tier: string; billing_period: string; coupon?: string }) =>
       api.post('/api/billing/checkout', data).then(res => res.data),
     onSuccess: (data) => {
       window.location.href = data.checkout_url
     }
   })
 
+  const [tokenError, setTokenError] = useState<string | null>(null)
+
   const tokenMutation = useMutation({
     mutationFn: (pack: string) =>
       api.post('/api/billing/tokens', { pack }).then(res => res.data),
     onSuccess: (data) => {
       window.location.href = data.checkout_url
+    },
+    onError: (error: any) => {
+      console.error('Token purchase error:', error)
+      const message = error.response?.data?.detail || error.message || 'Failed to start checkout'
+      setTokenError(message)
+      setTimeout(() => setTokenError(null), 5000)
     }
   })
 
@@ -188,6 +199,11 @@ export default function Billing() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
+      <SEO
+        title="Billing & Subscription"
+        description="Manage your VANurses subscription. View plans, upgrade your account, and access premium nursing career features."
+        canonical="https://vanurses.net/billing"
+      />
       {/* Success Message */}
       {showSuccessMessage && (
         <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
@@ -304,6 +320,44 @@ export default function Billing() {
           </div>
         </div>
 
+        {/* Coupon Code Section */}
+        <div className="mb-6">
+          <button
+            onClick={() => setShowCouponInput(!showCouponInput)}
+            className="flex items-center gap-2 text-sm text-slate-600 hover:text-primary-600 transition-colors"
+          >
+            <Tag className="w-4 h-4" />
+            Have a coupon code?
+            <ChevronDown className={`w-4 h-4 transition-transform ${showCouponInput ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showCouponInput && (
+            <div className="mt-3 flex gap-2 max-w-sm">
+              <input
+                type="text"
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                placeholder="Enter coupon code"
+                className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent uppercase"
+              />
+              {couponCode && (
+                <button
+                  onClick={() => setCouponCode('')}
+                  className="px-3 py-2 text-slate-400 hover:text-slate-600 text-sm"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
+          {couponCode && (
+            <p className="mt-2 text-sm text-emerald-600 flex items-center gap-1">
+              <Check className="w-4 h-4" />
+              Coupon "{couponCode}" will be applied at checkout
+            </p>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {tiers.map((tier) => {
             const Icon = TIER_ICONS[tier.id] || Star
@@ -353,7 +407,11 @@ export default function Billing() {
                 <button
                   onClick={() => {
                     if (tier.id !== 'free' && !isCurrentPlan) {
-                      checkoutMutation.mutate({ tier: tier.id, billing_period: billingPeriod })
+                      checkoutMutation.mutate({
+                        tier: tier.id,
+                        billing_period: billingPeriod,
+                        ...(couponCode && { coupon: couponCode })
+                      })
                     }
                   }}
                   disabled={isCurrentPlan || tier.id === 'free' || checkoutMutation.isPending}
@@ -391,6 +449,17 @@ export default function Billing() {
           </div>
         </div>
 
+        {/* Token Purchase Error Message */}
+        {tokenError && (
+          <div className="flex items-center gap-3 p-4 mb-4 bg-red-50 border border-red-200 rounded-xl">
+            <XCircle className="w-6 h-6 text-red-500 flex-shrink-0" />
+            <div>
+              <p className="font-medium text-red-800">Purchase Failed</p>
+              <p className="text-sm text-red-600">{tokenError}</p>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {packs.map((pack) => (
             <div
@@ -422,6 +491,45 @@ export default function Billing() {
               </button>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Donate Section */}
+      <div id="donate" className="bg-gradient-to-br from-pink-50 via-rose-50 to-amber-50 rounded-2xl shadow-sm border border-rose-100 p-8">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex-1 text-center md:text-left">
+            <div className="flex items-center gap-3 mb-3 justify-center md:justify-start">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-rose-500 to-pink-500 flex items-center justify-center">
+                <Heart className="w-6 h-6 text-white" />
+              </div>
+              <h2 className="text-xl font-bold text-slate-900">Support Our Mission</h2>
+            </div>
+            <p className="text-slate-600 mb-4 max-w-lg">
+              VANurses is built by nurses, for nurses. Your donation helps us maintain this free resource,
+              add new facilities, and develop tools that help Virginia nurses make informed career decisions.
+            </p>
+            <div className="flex flex-wrap gap-2 justify-center md:justify-start text-sm text-slate-500">
+              <span className="bg-white/70 px-3 py-1 rounded-full">Server costs</span>
+              <span className="bg-white/70 px-3 py-1 rounded-full">New features</span>
+              <span className="bg-white/70 px-3 py-1 rounded-full">Data updates</span>
+              <span className="bg-white/70 px-3 py-1 rounded-full">Community support</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <a
+              href="https://buy.stripe.com/3cI7sD9x6dky8Zv9Ji6Vq00"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl hover:from-rose-600 hover:to-pink-600 transition-all transform hover:-translate-y-0.5"
+            >
+              <Heart className="w-5 h-5" />
+              Donate Now
+            </a>
+            <p className="text-xs text-slate-500 text-center">
+              One-time donation via Stripe
+            </p>
+          </div>
         </div>
       </div>
 

@@ -10,6 +10,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useSubscription, isAdminUnlocked } from '../hooks/useSubscription'
+import { SEO } from '../components/SEO'
 
 interface Facility {
   id: string
@@ -147,6 +148,11 @@ export default function Map() {
 
   return (
     <div className="space-y-6">
+      <SEO
+        title="Facility Map"
+        description="Explore healthcare facilities across Virginia on our interactive map. View locations, ratings, and job availability at a glance."
+        canonical="https://vanurses.net/map"
+      />
       {/* Upgrade Banner for Free Users */}
       {!canSeeAllScores && (
         <div className="bg-gradient-to-r from-primary-600 to-accent-600 rounded-xl p-4 text-white">

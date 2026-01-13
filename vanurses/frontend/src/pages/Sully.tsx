@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, Sparkles, Info, Zap, Lock, Unlock, Key, LogIn, Database, Globe } from 'lucide-react'
+import { Send, Loader2, Sparkles, Info, Zap, Lock, Unlock, Key, LogIn, Database, Globe, Heart, Crown } from 'lucide-react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useAuth } from 'react-oidc-context'
+import { Link } from 'react-router-dom'
 import { isAdminUnlocked } from '../hooks/useSubscription'
 import { api } from '../api/client'
+import { SEO } from '../components/SEO'
 
 type Mood = 'optimistic' | 'neutral' | 'stern' | 'nofilter'
 type SearchMode = 'internal' | 'hybrid' | 'web'
@@ -117,9 +119,12 @@ export default function Sully() {
     mutationFn: (message: string) =>
       api.post('/api/sully/chat', { message, mood, search_mode: searchMode }).then(res => res.data),
     onSuccess: (data) => {
+      // Check if this is a rate limit message
+      const isRateLimited = data.remaining === 0 && data.response.includes("reached your daily limit")
+
       setMessages(prev => [...prev, {
         role: 'sully',
-        content: data.response,
+        content: isRateLimited ? '__RATE_LIMITED__' : data.response,
         mood: data.mood,
         searchMode: data.search_mode,
         dataSources: data.data_sources,
@@ -189,6 +194,11 @@ export default function Sully() {
 
   return (
     <div className="max-w-5xl mx-auto">
+      <SEO
+        title="Sully AI Assistant"
+        description="Chat with Sully, your AI nursing career assistant. Get personalized advice on jobs, facilities, and career decisions powered by VANurses data."
+        canonical="https://vanurses.net/sully"
+      />
       {/* Unlock Modal */}
       {showUnlockModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -362,26 +372,50 @@ export default function Sully() {
                       className="w-8 h-8 rounded-full object-cover flex-shrink-0"
                     />
                   )}
-                  <div
-                    className={`rounded-2xl px-4 py-3 ${
-                      msg.role === 'user'
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-slate-100 text-slate-900'
-                    }`}
-                  >
-                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                    {msg.dataSources && msg.dataSources.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-slate-200">
-                        <p className="text-[10px] text-slate-500 flex items-center gap-1">
-                          <Database className="w-3 h-3" />
-                          Sources: {msg.dataSources.join(', ')}
-                        </p>
+                  {/* Special rate limit message */}
+                  {msg.content === '__RATE_LIMITED__' ? (
+                    <div className="bg-gradient-to-br from-primary-50 to-teal-50 border border-primary-200 rounded-2xl p-5 max-w-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Heart className="w-5 h-5 text-red-500" />
+                        <span className="font-semibold text-slate-900">Daily Limit Reached</span>
                       </div>
-                    )}
-                    <p className={`text-xs mt-1 ${msg.role === 'user' ? 'text-primary-200' : 'text-slate-400'}`}>
-                      {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
+                      <p className="text-slate-700 text-sm mb-4">
+                        You've used your daily Sully chats! We're a small team trying to build something great for Virginia nurses.
+                        Your support helps us keep the servers running and make VANurses even better.
+                      </p>
+                      <Link
+                        to="/billing"
+                        className="inline-flex items-center gap-2 w-full justify-center px-5 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors font-semibold text-sm"
+                      >
+                        <Crown className="w-5 h-5" />
+                        Support Us & Get More Chats
+                      </Link>
+                      <p className="text-xs text-slate-500 text-center mt-3">
+                        Your limit resets at midnight. Thank you for using VANurses!
+                      </p>
+                    </div>
+                  ) : (
+                    <div
+                      className={`rounded-2xl px-4 py-3 ${
+                        msg.role === 'user'
+                          ? 'bg-primary-500 text-white'
+                          : 'bg-slate-100 text-slate-900'
+                      }`}
+                    >
+                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                      {msg.dataSources && msg.dataSources.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-slate-200">
+                          <p className="text-[10px] text-slate-500 flex items-center gap-1">
+                            <Database className="w-3 h-3" />
+                            Sources: {msg.dataSources.join(', ')}
+                          </p>
+                        </div>
+                      )}
+                      <p className={`text-xs mt-1 ${msg.role === 'user' ? 'text-primary-200' : 'text-slate-400'}`}>
+                        {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

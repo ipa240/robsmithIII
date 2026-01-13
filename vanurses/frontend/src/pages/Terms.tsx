@@ -1,6 +1,13 @@
+import { SEO } from '../components/SEO'
+
 export default function Terms() {
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
+      <SEO
+        title="Terms of Service"
+        description="VANurses Terms of Service. Read our terms and conditions for using the VANurses nursing job platform and AI assistant."
+        canonical="https://vanurses.net/terms"
+      />
       <h1 className="text-3xl font-bold text-slate-900 mb-6">Terms of Service</h1>
       <p className="text-sm text-slate-500 mb-8">Last Updated: December 7, 2025</p>
 
@@ -99,7 +106,7 @@ export default function Terms() {
         <section className="mb-8">
           <h2 className="text-xl font-semibold text-slate-800 mb-4">6. Job Listings & Facility Information</h2>
           <p className="text-slate-600 mb-4">
-            Job listings and facility information are aggregated from various sources and provided for
+            Job listings and facility information are sourced from various sources and provided for
             informational purposes. VANurses does not guarantee the accuracy, completeness, or availability
             of any listing. The OFS (Optimal Facility Score) is a proprietary rating system based on
             publicly available data and should be used as one factor among many in your decision-making.

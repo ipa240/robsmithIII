@@ -11,6 +11,7 @@ import {
 import { useState } from 'react'
 import { api } from '../api/client'
 import SullyButton from '../components/SullyButton'
+import { SEO } from '../components/SEO'
 
 export default function Landing() {
   const auth = useAuth()
@@ -41,6 +42,23 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
+      <SEO
+        title="Travel Nursing Jobs & Facility Ratings"
+        description="Compare travel nursing jobs, facility grades, and salary data. Find the best assignments with VANurses - your trusted resource for nursing career decisions."
+        canonical="https://vanurses.net"
+        schema={{
+          '@context': 'https://schema.org',
+          '@type': 'WebSite',
+          name: 'VANurses',
+          url: 'https://vanurses.net',
+          description: 'Travel nursing jobs, facility ratings, and salary data for nurses',
+          potentialAction: {
+            '@type': 'SearchAction',
+            target: 'https://vanurses.net/jobs?q={search_term_string}',
+            'query-input': 'required name=search_term_string',
+          },
+        }}
+      />
       {/* Header */}
       <header className="absolute top-0 left-0 right-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-6">
@@ -917,13 +935,13 @@ export default function Landing() {
           <div className="relative">
             <div className="flex animate-scroll gap-4 md:gap-6">
               {[
-                { text: "I sure wish I had this when I started my nursing career!", author: "Brandy A.", role: "RN, 15 years" },
+                { text: "I sure wish I had this when I started my nursing career!", author: "Sarah M.", role: "Travel Nurse" },
                 { text: "The facility scores are a game-changer.", author: "Marcus T.", role: "ICU Nurse" },
                 { text: "The salary transparency saved me from lowball offers.", author: "Jennifer L.", role: "ER Nurse" },
                 { text: "The scoring system made it so much easier.", author: "David K.", role: "New Grad RN" },
                 { text: "Sully helped me prep for my interview!", author: "Tamika R.", role: "L&D Nurse" },
                 { text: "I recommend VANurses to every nurse I precept.", author: "Patricia M.", role: "Charge Nurse" },
-                { text: "I sure wish I had this when I started my nursing career!", author: "Brandy A.", role: "RN, 15 years" },
+                { text: "I sure wish I had this when I started my nursing career!", author: "Sarah M.", role: "Travel Nurse" },
                 { text: "The facility scores are a game-changer.", author: "Marcus T.", role: "ICU Nurse" },
               ].map((testimonial, i) => (
                 <div
@@ -1230,6 +1248,96 @@ export default function Landing() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Support Our Mission */}
+      <section className="py-20 px-4 bg-gradient-to-br from-rose-900/40 via-slate-900 to-amber-900/30">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 bg-rose-500/20 text-rose-300 px-4 py-2 rounded-full text-sm font-medium mb-6">
+              <Heart className="w-4 h-4" />
+              Support Our Mission
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
+              Help Us Keep Virginia Nurses Informed
+            </h2>
+          </div>
+
+          <div className="bg-slate-800/60 backdrop-blur border border-rose-500/20 rounded-2xl p-8 md:p-10 mb-10">
+            <p className="text-lg text-slate-300 mb-6 leading-relaxed">
+              VANurses is a <span className="text-white font-semibold">labor of love</span>, built and maintained by a
+              <span className="text-rose-300 font-semibold"> team who understands what nurses really need</span>. We truly believe
+              that by funding and publicizing this platform, <span className="text-white font-semibold">we can make real change</span> in
+              how nurses find jobs and evaluate facilities.
+            </p>
+            <p className="text-lg text-slate-300 mb-6 leading-relaxed">
+              This isn't a big corporate website — it's <span className="text-white font-semibold">independently operated</span>,
+              built with care, and kept running because we genuinely care about Virginia's nursing community.
+              Every feature you see comes from countless hours of development, research, and a deep understanding of
+              what nurses actually need.
+            </p>
+            <p className="text-lg text-slate-300 leading-relaxed">
+              <span className="text-white font-semibold">The core platform will always be free</span> — because we believe every nurse
+              deserves access to transparent facility data and job information. But your support helps us keep the servers running,
+              add new facilities, develop AI features, and continue improving the platform for all Virginia nurses.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6 mb-10">
+            <Link
+              to="/billing#plans"
+              className="bg-gradient-to-br from-primary-600/30 to-accent-600/30 backdrop-blur border border-primary-500/30 rounded-xl p-6 hover:border-primary-400/50 transition-all group"
+            >
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 bg-primary-500/30 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Star className="w-7 h-7 text-primary-300" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white mb-2 group-hover:text-primary-300 transition-colors">
+                    Subscribe for Pro Features
+                  </h3>
+                  <p className="text-slate-300 mb-4">
+                    Unlock unlimited Sully AI chats, personalized job scoring, trend alerts, and more while supporting our mission.
+                  </p>
+                  <span className="text-primary-400 text-sm font-medium flex items-center gap-1 group-hover:gap-2 transition-all">
+                    View Plans <ArrowRight className="w-4 h-4" />
+                  </span>
+                </div>
+              </div>
+            </Link>
+
+            <a
+              href="https://buy.stripe.com/3cI7sD9x6dky8Zv9Ji6Vq00"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-gradient-to-br from-rose-600/30 to-pink-600/30 backdrop-blur border border-rose-500/30 rounded-xl p-6 hover:border-rose-400/50 transition-all group"
+            >
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 bg-rose-500/30 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Heart className="w-7 h-7 text-rose-300" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white mb-2 group-hover:text-rose-300 transition-colors">
+                    Make a Donation
+                  </h3>
+                  <p className="text-slate-300 mb-4">
+                    Any amount helps us cover server costs, data updates, and new feature development. One-time, no commitment.
+                  </p>
+                  <span className="text-rose-400 text-sm font-medium flex items-center gap-1 group-hover:gap-2 transition-all">
+                    Donate Now <ArrowRight className="w-4 h-4" />
+                  </span>
+                </div>
+              </div>
+            </a>
+          </div>
+
+          <div className="text-center">
+            <p className="text-slate-400 text-sm">
+              Whether you donate, subscribe, or simply spread the word — <span className="text-white">thank you for being part of our mission</span>
+              to help Virginia nurses make better career decisions.
+            </p>
           </div>
         </div>
       </section>

@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   User, Mail, Shield, Heart, MapPin, Briefcase, Award,
-  Edit2, Check, X, Lock, Crown, Trash2, AlertTriangle, Eye, Building2, Loader2, ClipboardList
+  Edit2, Check, X, Lock, Crown, Trash2, AlertTriangle, Eye, Building2, Loader2, ClipboardList, Search, Users, Bell, MessageSquare
 } from 'lucide-react'
 import { api, setAuthToken } from '../api/client'
+import { SEO } from '../components/SEO'
 
 // OFS Index definitions (10 total indices)
 const OFS_INDICES = [
@@ -29,6 +30,17 @@ const TIER_LIMITS: Record<string, number> = {
   premium: 999
 }
 
+// Forum categories for email notification preferences
+const FORUM_CATEGORIES = [
+  { id: 'b824c386-c03c-4d11-81af-42722c7980e1', slug: 'general', name: 'General Discussion' },
+  { id: 'c5c30212-6e15-468f-a308-976115d559b7', slug: 'virginia', name: 'Virginia Nurses' },
+  { id: '57d18414-eb7f-4567-8fdc-79aae510b6ef', slug: 'icu', name: 'ICU/Critical Care' },
+  { id: 'c4c192b5-9797-4530-a295-97f7cc7c18ec', slug: 'career', name: 'Career Advice' },
+  { id: '9f753707-6125-4887-a70d-9bd44d27d4c4', slug: 'new-nurses', name: 'New Nurses' },
+  { id: '77fd3eef-0ba4-4a3a-9f8f-ebe067871c8c', slug: 'travel', name: 'Travel Nursing' },
+  { id: '9ce4926a-d675-4d82-87ec-3802f615d6af', slug: 'facility-reviews', name: 'Facility Reviews' },
+]
+
 export default function Profile() {
   const auth = useAuth()
   const navigate = useNavigate()
@@ -44,6 +56,22 @@ export default function Profile() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [editingZip, setEditingZip] = useState(false)
   const [zipCode, setZipCode] = useState('')
+
+  // Employment & Directory state
+  const [editingEmployment, setEditingEmployment] = useState(false)
+  const [facilitySearch, setFacilitySearch] = useState('')
+  const [showFacilityDropdown, setShowFacilityDropdown] = useState(false)
+  const [selectedFacility, setSelectedFacility] = useState<{ id: string; name: string } | null>(null)
+  const [isOtherFacility, setIsOtherFacility] = useState(false)
+  const [employerName, setEmployerName] = useState('')
+  const [directoryOptIn, setDirectoryOptIn] = useState(false)
+  const [directoryDisplayName, setDirectoryDisplayName] = useState('')
+
+  // Email notification state
+  const [editingNotifications, setEditingNotifications] = useState(false)
+  const [forumAlertsEnabled, setForumAlertsEnabled] = useState(true)
+  const [forwardChatsEnabled, setForwardChatsEnabled] = useState(true)
+  const [alertCategories, setAlertCategories] = useState<string[]>(['b824c386-c03c-4d11-81af-42722c7980e1']) // Default: General Discussion
 
   useEffect(() => {
     if (auth.user?.access_token) {
@@ -121,7 +149,87 @@ export default function Profile() {
     if (preferences?.location_zip) {
       setZipCode(preferences.location_zip)
     }
+    // Load employment & directory data
+    if (preferences?.current_employer_name) {
+      setEmployerName(preferences.current_employer_name)
+      setIsOtherFacility(true)
+    }
+    if (preferences?.directory_opt_in !== undefined) {
+      setDirectoryOptIn(preferences.directory_opt_in)
+    }
+    if (preferences?.directory_display_name) {
+      setDirectoryDisplayName(preferences.directory_display_name)
+    }
+    // Load notification preferences (defaults if not set)
+    setForumAlertsEnabled(preferences?.forum_alerts_enabled ?? true)
+    setForwardChatsEnabled(preferences?.forward_chats_enabled ?? true)
+    setAlertCategories(preferences?.alert_categories || ['b824c386-c03c-4d11-81af-42722c7980e1'])
   }, [preferences])
+
+  // Facility search query
+  const { data: facilitiesSearch = [] } = useQuery({
+    queryKey: ['facilities-search', facilitySearch],
+    queryFn: () => api.get('/api/facilities', { params: { search: facilitySearch, limit: 10 } }).then(res => res.data.data || []),
+    enabled: facilitySearch.length >= 2 && !isOtherFacility && editingEmployment,
+  })
+
+  // Generate default directory display name: "F. Lastname [Facility Name]"
+  const generateDirectoryName = (facility: string | null) => {
+    const firstName = user?.first_name || auth.user?.profile?.given_name || ''
+    const lastName = user?.last_name || auth.user?.profile?.family_name || ''
+    const initial = firstName ? firstName.charAt(0).toUpperCase() + '.' : ''
+    const facilityPart = facility ? ` [${facility}]` : ''
+    return `${initial} ${lastName}${facilityPart}`.trim()
+  }
+
+  // Handle facility selection
+  const handleSelectFacility = (facility: { id: string; name: string }) => {
+    setSelectedFacility(facility)
+    setFacilitySearch(facility.name)
+    setShowFacilityDropdown(false)
+    setIsOtherFacility(false)
+    setEmployerName('')
+    if (!directoryDisplayName) {
+      setDirectoryDisplayName(generateDirectoryName(facility.name))
+    }
+  }
+
+  // Handle "Other" selection
+  const handleSelectOther = () => {
+    setSelectedFacility(null)
+    setIsOtherFacility(true)
+    setShowFacilityDropdown(false)
+    setFacilitySearch('')
+  }
+
+  // Save employment & directory settings
+  const updateEmploymentMutation = useMutation({
+    mutationFn: (data: any) => api.put('/api/me/preferences', {
+      ...preferences,
+      current_employer_facility_id: selectedFacility?.id || null,
+      current_employer_name: isOtherFacility ? employerName : null,
+      directory_opt_in: directoryOptIn,
+      directory_display_name: directoryDisplayName
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['preferences'] })
+      setEditingEmployment(false)
+    }
+  })
+
+  // Save email notification preferences
+  const updateNotificationsMutation = useMutation({
+    mutationFn: () => api.put('/api/me/preferences', {
+      ...preferences,
+      forum_alerts_enabled: forumAlertsEnabled,
+      forward_chats_enabled: forwardChatsEnabled,
+      alert_categories: alertCategories
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['preferences'] })
+      setEditingNotifications(false)
+    }
+  })
 
   const updateZipMutation = useMutation({
     mutationFn: (zip: string) => api.put('/api/me/preferences', {
@@ -167,6 +275,11 @@ export default function Profile() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
+      <SEO
+        title="My Profile"
+        description="Manage your VANurses profile. Update your preferences, nursing credentials, and job search settings."
+        canonical="https://vanurses.net/profile"
+      />
       <h1 className="text-3xl font-bold text-slate-900">Your Profile</h1>
 
       {/* Personal Info */}
@@ -343,6 +456,357 @@ export default function Profile() {
                   {s}
                 </span>
               ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Employment & Directory */}
+      <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-5 h-5 text-emerald-600" />
+            <h2 className="text-lg font-semibold text-slate-900">Employment & Directory</h2>
+          </div>
+          {editingEmployment ? (
+            <div className="flex gap-2">
+              <button
+                onClick={() => setEditingEmployment(false)}
+                className="p-2 text-slate-500 hover:text-slate-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => updateEmploymentMutation.mutate({})}
+                disabled={updateEmploymentMutation.isPending}
+                className="p-2 text-green-600 hover:text-green-700"
+              >
+                <Check className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setEditingEmployment(true)}
+              className="p-2 text-primary-600 hover:text-primary-700"
+            >
+              <Edit2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {editingEmployment ? (
+          <div className="space-y-4">
+            {/* Facility Search */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Current Employer
+              </label>
+              <div className="relative">
+                {!isOtherFacility ? (
+                  <>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        value={facilitySearch}
+                        onChange={(e) => {
+                          setFacilitySearch(e.target.value)
+                          setShowFacilityDropdown(true)
+                          if (selectedFacility && e.target.value !== selectedFacility.name) {
+                            setSelectedFacility(null)
+                          }
+                        }}
+                        onFocus={() => setShowFacilityDropdown(true)}
+                        placeholder="Search for your hospital or facility..."
+                        className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      />
+                    </div>
+                    {/* Dropdown */}
+                    {showFacilityDropdown && (facilitySearch.length >= 2 || facilitiesSearch.length > 0) && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {facilitiesSearch.map((f: any) => (
+                          <button
+                            key={f.id}
+                            onClick={() => handleSelectFacility({ id: f.id, name: f.name })}
+                            className="w-full px-4 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2 border-b border-slate-100 last:border-b-0"
+                          >
+                            <Building2 className="w-4 h-4 text-slate-400" />
+                            <div>
+                              <div className="text-sm font-medium text-slate-900">{f.name}</div>
+                              <div className="text-xs text-slate-500">{f.city}, {f.state}</div>
+                            </div>
+                          </button>
+                        ))}
+                        {/* Other option */}
+                        <button
+                          onClick={handleSelectOther}
+                          className="w-full px-4 py-2.5 text-left hover:bg-amber-50 flex items-center gap-2 bg-amber-50/50"
+                        >
+                          <span className="w-4 h-4 text-amber-600 text-lg leading-none">+</span>
+                          <div>
+                            <div className="text-sm font-medium text-amber-700">Other / Not Listed</div>
+                            <div className="text-xs text-amber-600">Enter facility name manually</div>
+                          </div>
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={employerName}
+                        onChange={(e) => {
+                          setEmployerName(e.target.value)
+                          if (!directoryDisplayName) {
+                            setDirectoryDisplayName(generateDirectoryName(e.target.value))
+                          }
+                        }}
+                        placeholder="Enter your facility name"
+                        className="flex-1 px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => {
+                          setIsOtherFacility(false)
+                          setFacilitySearch('')
+                          setEmployerName('')
+                        }}
+                        className="px-3 py-2.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg text-sm"
+                      >
+                        Search
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-500">Type your facility name if it's not in our system</p>
+                  </div>
+                )}
+              </div>
+              {selectedFacility && (
+                <p className="mt-2 text-sm text-emerald-600 flex items-center gap-1">
+                  <Check className="w-4 h-4" />
+                  Selected: {selectedFacility.name}
+                </p>
+              )}
+            </div>
+
+            {/* Directory Opt-in */}
+            <div className="bg-slate-50 rounded-lg p-4">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={directoryOptIn}
+                  onChange={(e) => {
+                    setDirectoryOptIn(e.target.checked)
+                    if (e.target.checked && !directoryDisplayName) {
+                      setDirectoryDisplayName(generateDirectoryName(selectedFacility?.name || employerName || null))
+                    }
+                  }}
+                  className="w-5 h-5 text-primary-600 rounded mt-0.5"
+                />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-primary-600" />
+                    <span className="font-medium text-slate-900">Show me in the Nurse Directory</span>
+                  </div>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Let other nurses find and connect with you in Community and Chat (coming soon).
+                  </p>
+                </div>
+              </label>
+
+              {/* Directory Display Name */}
+              {directoryOptIn && (
+                <div className="mt-3 pl-8">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Directory Display Name
+                  </label>
+                  <input
+                    type="text"
+                    value={directoryDisplayName}
+                    onChange={(e) => setDirectoryDisplayName(e.target.value)}
+                    placeholder="e.g., J. Smith [Hospital Name]"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">
+                    This is how you'll appear in the directory and community
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+              <Building2 className="w-5 h-5 text-slate-400" />
+              <div>
+                <div className="text-sm text-slate-500">Current Employer</div>
+                <div className="font-medium">
+                  {preferences?.current_employer_name || selectedFacility?.name || 'Not set'}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+              <Users className="w-5 h-5 text-slate-400" />
+              <div className="flex-1">
+                <div className="text-sm text-slate-500">Nurse Directory</div>
+                <div className="font-medium">
+                  {preferences?.directory_opt_in ? (
+                    <span className="text-emerald-600 flex items-center gap-1">
+                      <Check className="w-4 h-4" /> Listed as: {preferences?.directory_display_name || 'Not set'}
+                    </span>
+                  ) : (
+                    <span className="text-slate-600">Not listed</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Email Notifications */}
+      <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Bell className="w-5 h-5 text-primary-600" />
+            <h2 className="text-lg font-semibold text-slate-900">Email Notifications</h2>
+          </div>
+          {editingNotifications ? (
+            <div className="flex gap-2">
+              <button
+                onClick={() => setEditingNotifications(false)}
+                className="p-2 text-slate-500 hover:text-slate-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => updateNotificationsMutation.mutate()}
+                disabled={updateNotificationsMutation.isPending}
+                className="p-2 text-green-600 hover:text-green-700"
+              >
+                <Check className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setEditingNotifications(true)}
+              className="p-2 text-primary-600 hover:text-primary-700"
+            >
+              <Edit2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        <p className="text-sm text-slate-500 mb-4">
+          Get email notifications for community discussions and Sully chat summaries.
+        </p>
+
+        {editingNotifications ? (
+          <div className="space-y-4">
+            {/* Forum Alerts Toggle */}
+            <label className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg cursor-pointer">
+              <input
+                type="checkbox"
+                checked={forumAlertsEnabled}
+                onChange={(e) => setForumAlertsEnabled(e.target.checked)}
+                className="w-5 h-5 text-primary-600 rounded mt-0.5"
+              />
+              <div>
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-primary-600" />
+                  <span className="font-medium text-slate-900">Community Forum Alerts</span>
+                </div>
+                <p className="text-sm text-slate-500 mt-1">
+                  Receive email notifications for new posts in selected categories
+                </p>
+              </div>
+            </label>
+
+            {/* Category Selection - Show when forum alerts enabled */}
+            {forumAlertsEnabled && (
+              <div className="pl-8">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Categories to Receive Alerts From
+                </label>
+                <div className="space-y-2">
+                  {FORUM_CATEGORIES.map((cat) => (
+                    <label key={cat.id} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={alertCategories.includes(cat.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setAlertCategories([...alertCategories, cat.id])
+                          } else {
+                            setAlertCategories(alertCategories.filter(id => id !== cat.id))
+                          }
+                        }}
+                        className="w-4 h-4 text-primary-600 rounded"
+                      />
+                      <span className="text-sm text-slate-700">{cat.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Forward Chats Toggle */}
+            <label className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg cursor-pointer">
+              <input
+                type="checkbox"
+                checked={forwardChatsEnabled}
+                onChange={(e) => setForwardChatsEnabled(e.target.checked)}
+                className="w-5 h-5 text-primary-600 rounded mt-0.5"
+              />
+              <div>
+                <div className="flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-primary-600" />
+                  <span className="font-medium text-slate-900">Forward Sully Chats to Email</span>
+                </div>
+                <p className="text-sm text-slate-500 mt-1">
+                  Get a summary of your Sully conversations sent to your email
+                </p>
+              </div>
+            </label>
+
+            <p className="text-xs text-slate-400 mt-2">
+              Emails are sent from noreply@vanurses.net
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+              <MessageSquare className="w-5 h-5 text-slate-400" />
+              <div className="flex-1">
+                <div className="text-sm text-slate-500">Community Forum Alerts</div>
+                <div className="font-medium">
+                  {forumAlertsEnabled ? (
+                    <span className="text-emerald-600 flex items-center gap-1">
+                      <Check className="w-4 h-4" /> Enabled ({alertCategories.length} {alertCategories.length === 1 ? 'category' : 'categories'})
+                    </span>
+                  ) : (
+                    <span className="text-slate-600">Disabled</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+              <Mail className="w-5 h-5 text-slate-400" />
+              <div className="flex-1">
+                <div className="text-sm text-slate-500">Forward Sully Chats to Email</div>
+                <div className="font-medium">
+                  {forwardChatsEnabled ? (
+                    <span className="text-emerald-600 flex items-center gap-1">
+                      <Check className="w-4 h-4" /> Enabled
+                    </span>
+                  ) : (
+                    <span className="text-slate-600">Disabled</span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { api } from '../api/client'
 import { unlockAdmin, lockAdmin, isAdminUnlocked } from '../hooks/useSubscription'
+import { SEO } from '../components/SEO'
 
 interface FAQ {
   question: string
@@ -56,7 +57,7 @@ const faqs: FAQ[] = [
   {
     category: 'Jobs',
     question: 'How often are jobs updated?',
-    answer: 'Our job scraper runs daily to fetch new postings from healthcare job boards across Virginia. Jobs are verified and scored within 24 hours of posting.'
+    answer: 'Our system updates daily with new postings from healthcare employers across Virginia. Jobs are verified and scored within 24 hours of posting.'
   },
   {
     category: 'Jobs',
@@ -104,6 +105,11 @@ export default function Support() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
+      <SEO
+        title="Support & Help"
+        description="Get help with VANurses. Browse FAQs, submit support tickets, and find answers to common questions about our nursing job platform."
+        canonical="https://vanurses.net/support"
+      />
       {/* Header */}
       <div className="flex items-center gap-4">
         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">

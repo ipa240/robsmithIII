@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from 'react-oidc-context'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Check, ChevronRight, ChevronLeft, Heart, Star, Crown, Sparkles, Briefcase, Building2 } from 'lucide-react'
+import { Check, ChevronRight, ChevronLeft, Heart, Star, Crown, Sparkles, Briefcase, Building2, Search, Users } from 'lucide-react'
 import { api, setAuthToken } from '../api/client'
+import { SEO } from '../components/SEO'
 
 const NURSING_TYPES = ['RN', 'LPN', 'CNA', 'NP', 'CRNA', 'CNM', 'CNS']
 const SPECIALTIES = [
@@ -280,6 +281,12 @@ export default function Onboarding() {
     shift_preferences: [] as string[],
     childcare_needs: '' as 'onsite' | 'nearby' | 'none' | '',
 
+    // Current employment & directory
+    current_employer_facility_id: '' as string,
+    current_employer_name: '' as string, // For "Other" option
+    directory_opt_in: false,
+    directory_display_name: '' as string,
+
     // Location
     location_zip: '',
 
@@ -290,11 +297,70 @@ export default function Onboarding() {
     } as Record<string, number>
   })
 
+  // Facility search state
+  const [facilitySearch, setFacilitySearch] = useState('')
+  const [showFacilityDropdown, setShowFacilityDropdown] = useState(false)
+  const [selectedFacility, setSelectedFacility] = useState<{ id: string; name: string } | null>(null)
+  const [isOtherFacility, setIsOtherFacility] = useState(false)
+
   useEffect(() => {
     if (auth.user?.access_token) {
       setAuthToken(auth.user.access_token)
     }
   }, [auth.user?.access_token])
+
+  // Facility search query
+  const { data: facilitiesSearch = [] } = useQuery({
+    queryKey: ['facilities-search', facilitySearch],
+    queryFn: () => api.get('/api/facilities', { params: { search: facilitySearch, limit: 10 } }).then(res => res.data.data || []),
+    enabled: facilitySearch.length >= 2 && !isOtherFacility,
+  })
+
+  // Generate default directory display name: "F. Lastname [Facility Name]"
+  const generateDirectoryName = (facility: string | null) => {
+    const profile = auth.user?.profile
+    const firstName = profile?.given_name || ''
+    const lastName = profile?.family_name || ''
+    const initial = firstName ? firstName.charAt(0).toUpperCase() + '.' : ''
+    const facilityPart = facility ? ` [${facility}]` : ''
+    return `${initial} ${lastName}${facilityPart}`.trim()
+  }
+
+  // Handle facility selection
+  const handleSelectFacility = (facility: { id: string; name: string }) => {
+    setSelectedFacility(facility)
+    setFacilitySearch(facility.name)
+    setShowFacilityDropdown(false)
+    setIsOtherFacility(false)
+    setFormData(f => ({
+      ...f,
+      current_employer_facility_id: facility.id,
+      current_employer_name: '',
+      directory_display_name: generateDirectoryName(facility.name)
+    }))
+  }
+
+  // Handle "Other" selection
+  const handleSelectOther = () => {
+    setSelectedFacility(null)
+    setIsOtherFacility(true)
+    setShowFacilityDropdown(false)
+    setFacilitySearch('')
+    setFormData(f => ({
+      ...f,
+      current_employer_facility_id: '',
+      current_employer_name: ''
+    }))
+  }
+
+  // Handle Other facility name change
+  const handleOtherFacilityNameChange = (name: string) => {
+    setFormData(f => ({
+      ...f,
+      current_employer_name: name,
+      directory_display_name: generateDirectoryName(name)
+    }))
+  }
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -341,6 +407,11 @@ export default function Onboarding() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center p-4">
+      <SEO
+        title="Complete Your Profile"
+        description="Set up your VANurses profile to get personalized job matches and facility recommendations."
+        noindex={true}
+      />
       <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden">
         {/* Progress - Hidden on step 0 (intent selection) */}
         {currentStep > 0 && (
@@ -667,6 +738,157 @@ export default function Onboarding() {
                     >
                       No preference
                     </button>
+                  </div>
+                </div>
+
+                {/* Current Employment & Directory */}
+                <div className="pt-4 border-t border-slate-200">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Building2 className="w-5 h-5 text-emerald-600" />
+                    <h3 className="text-lg font-semibold text-slate-900">Current Employment</h3>
+                    <span className="text-xs text-slate-400">(Optional)</span>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* Facility Search */}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Where do you currently work?
+                      </label>
+                      <div className="relative">
+                        {!isOtherFacility ? (
+                          <>
+                            <div className="relative">
+                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                              <input
+                                type="text"
+                                value={facilitySearch}
+                                onChange={(e) => {
+                                  setFacilitySearch(e.target.value)
+                                  setShowFacilityDropdown(true)
+                                  if (selectedFacility && e.target.value !== selectedFacility.name) {
+                                    setSelectedFacility(null)
+                                    setFormData(f => ({ ...f, current_employer_facility_id: '' }))
+                                  }
+                                }}
+                                onFocus={() => setShowFacilityDropdown(true)}
+                                placeholder="Search for your hospital or facility..."
+                                className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              />
+                            </div>
+                            {/* Dropdown */}
+                            {showFacilityDropdown && (facilitySearch.length >= 2 || facilitiesSearch.length > 0) && (
+                              <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                {facilitiesSearch.map((f: any) => (
+                                  <button
+                                    key={f.id}
+                                    onClick={() => handleSelectFacility({ id: f.id, name: f.name })}
+                                    className="w-full px-4 py-2.5 text-left hover:bg-slate-50 flex items-center gap-2 border-b border-slate-100 last:border-b-0"
+                                  >
+                                    <Building2 className="w-4 h-4 text-slate-400" />
+                                    <div>
+                                      <div className="text-sm font-medium text-slate-900">{f.name}</div>
+                                      <div className="text-xs text-slate-500">{f.city}, {f.state}</div>
+                                    </div>
+                                  </button>
+                                ))}
+                                {/* Other option */}
+                                <button
+                                  onClick={handleSelectOther}
+                                  className="w-full px-4 py-2.5 text-left hover:bg-amber-50 flex items-center gap-2 bg-amber-50/50"
+                                >
+                                  <span className="w-4 h-4 text-amber-600 text-lg leading-none">+</span>
+                                  <div>
+                                    <div className="text-sm font-medium text-amber-700">Other / Not Listed</div>
+                                    <div className="text-xs text-amber-600">Enter facility name manually</div>
+                                  </div>
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={formData.current_employer_name}
+                                onChange={(e) => handleOtherFacilityNameChange(e.target.value)}
+                                placeholder="Enter your facility name"
+                                className="flex-1 px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => {
+                                  setIsOtherFacility(false)
+                                  setFacilitySearch('')
+                                  setFormData(f => ({ ...f, current_employer_name: '' }))
+                                }}
+                                className="px-3 py-2.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg text-sm"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                            <p className="text-xs text-slate-500">Type your facility name if it's not in our system</p>
+                          </div>
+                        )}
+                      </div>
+                      {selectedFacility && (
+                        <p className="mt-2 text-sm text-emerald-600 flex items-center gap-1">
+                          <Check className="w-4 h-4" />
+                          Selected: {selectedFacility.name}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Directory Opt-in */}
+                    <div className="bg-slate-50 rounded-lg p-4">
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.directory_opt_in}
+                          onChange={(e) => {
+                            setFormData(f => ({
+                              ...f,
+                              directory_opt_in: e.target.checked,
+                              // Auto-generate directory name if opting in and no custom name set
+                              directory_display_name: e.target.checked && !f.directory_display_name
+                                ? generateDirectoryName(selectedFacility?.name || f.current_employer_name || null)
+                                : f.directory_display_name
+                            }))
+                          }}
+                          className="w-5 h-5 text-primary-600 rounded mt-0.5"
+                        />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Users className="w-4 h-4 text-primary-600" />
+                            <span className="font-medium text-slate-900">Join the Nurse Directory</span>
+                          </div>
+                          <p className="text-sm text-slate-500 mt-1">
+                            Let other nurses find and connect with you in Community and Chat (coming soon).
+                            Your name will appear as shown below.
+                          </p>
+                        </div>
+                      </label>
+
+                      {/* Directory Display Name */}
+                      {formData.directory_opt_in && (
+                        <div className="mt-3 pl-8">
+                          <label className="block text-sm font-medium text-slate-700 mb-1">
+                            Directory Display Name
+                          </label>
+                          <input
+                            type="text"
+                            value={formData.directory_display_name}
+                            onChange={(e) => setFormData(f => ({ ...f, directory_display_name: e.target.value }))}
+                            placeholder="e.g., J. Smith [Hospital Name]"
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
+                          <p className="text-xs text-slate-400 mt-1">
+                            This is how you'll appear in the directory and community
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

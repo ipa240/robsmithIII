@@ -9,6 +9,7 @@ import {
   Database, CheckCircle, HelpCircle, Crown, Lock, Sparkles,
   TrendingUp, ExternalLink, Activity, ShieldCheck
 } from 'lucide-react'
+import { SEO } from '../components/SEO'
 
 const INDICES = [
   {
@@ -26,7 +27,7 @@ const INDICES = [
     abbr: 'ERI',
     icon: Star,
     color: 'amber',
-    description: 'Aggregates employee sentiment from multiple trusted review platforms',
+    description: 'Reflects employee sentiment from trusted workplace review sources',
     factors: ['Overall satisfaction', 'Work-life balance', 'Management quality', 'Career growth']
   },
   {
@@ -171,7 +172,7 @@ const FAQ = [
   },
   {
     q: 'Can facilities dispute their scores?',
-    a: 'Facilities can submit corrections for factual errors. However, scores reflect aggregated public data and cannot be influenced.'
+    a: 'Facilities can submit corrections for factual errors. However, scores reflect publicly available data and cannot be influenced.'
   },
   {
     q: 'Why might a good hospital have a low score?',
@@ -195,6 +196,11 @@ export default function Scoring() {
 
   return (
     <div className="space-y-12">
+      <SEO
+        title="OFS Scoring System"
+        description="Learn about VANurses' comprehensive 13-index OFS scoring system. Evaluate healthcare facilities based on pay, safety, reviews, patient experience, and more."
+        canonical="https://vanurses.net/scoring"
+      />
       {/* Upgrade Banner for Free Users */}
       {showUpgradePrompt && (
         <div className="bg-gradient-to-r from-primary-600 to-accent-600 rounded-xl p-6 text-white">
@@ -338,7 +344,7 @@ export default function Scoring() {
           <h2 className="text-xl font-bold">Our Data Sources</h2>
         </div>
         <p className="text-slate-300 mb-6 max-w-2xl">
-          We aggregate data from trusted government sources, official healthcare databases,
+          We source data from trusted government sources, official healthcare databases,
           and reputable third-party platforms to ensure accuracy and objectivity.
         </p>
         <div className="grid sm:grid-cols-2 md:grid-cols-5 gap-4">

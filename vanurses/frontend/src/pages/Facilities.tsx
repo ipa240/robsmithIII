@@ -6,6 +6,7 @@ import { api } from '../api/client'
 import { toTitleCase } from '../utils/format'
 import { useAuth } from 'react-oidc-context'
 import { useSubscription, isAdminUnlocked } from '../hooks/useSubscription'
+import { SEO } from '../components/SEO'
 
 function getGradeColor(grade: string) {
   // Handle grades with +/- modifiers (A+, A, A-, etc.)
@@ -239,6 +240,18 @@ export default function Facilities() {
 
   return (
     <div className="space-y-6">
+      <SEO
+        title="Facility Ratings & Reviews"
+        description="Compare healthcare facility ratings and nurse reviews across Virginia. Find top-rated hospitals, nursing homes, and healthcare centers with our comprehensive scoring system."
+        canonical="https://vanurses.net/facilities"
+        schema={{
+          '@context': 'https://schema.org',
+          '@type': 'ItemList',
+          name: 'Healthcare Facility Ratings',
+          description: 'Browse healthcare facility ratings and reviews',
+          url: 'https://vanurses.net/facilities',
+        }}
+      />
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">Facility Rankings</h1>

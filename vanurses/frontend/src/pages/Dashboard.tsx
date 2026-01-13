@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
   Briefcase, Building2, Bookmark, DollarSign, ArrowRight,
-  Newspaper, FileCheck, Clock, Send, Lock, Crown, Eye
+  Newspaper, FileCheck, Clock, Send, Lock, Crown, Eye,
+  GraduationCap, MessageCircle, ClipboardList
 } from 'lucide-react'
 import { api, setAuthToken, createAuthenticatedApi } from '../api/client'
 import { useEffect, useState } from 'react'
@@ -14,6 +15,7 @@ import PayPercentileWidget from '../components/dashboard/PayPercentileWidget'
 import RecommendationRows from '../components/dashboard/RecommendationRows'
 import StreakCounter from '../components/dashboard/StreakCounter'
 import CompleteOnboardingPrompt from '../components/dashboard/CompleteOnboardingPrompt'
+import { SEO } from '../components/SEO'
 
 export default function Dashboard() {
   const auth = useAuth()
@@ -132,6 +134,11 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
+      <SEO
+        title="Dashboard"
+        description="Your personalized VANurses dashboard. Track job applications, saved positions, and get AI-powered career insights."
+        canonical="https://vanurses.net/dashboard"
+      />
       {/* Page Header */}
       <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
 
@@ -218,6 +225,62 @@ export default function Dashboard() {
         </Link>
       </div>
 
+      {/* Quick Actions for Authenticated Users */}
+      {auth.isAuthenticated && (
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <h2 className="text-lg font-semibold text-slate-900 mb-4">Quick Actions</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Saved Jobs */}
+            <Link
+              to="/saved"
+              className="flex flex-col items-center gap-2 p-4 rounded-xl bg-amber-50 hover:bg-amber-100 transition-colors group"
+            >
+              <div className="w-12 h-12 rounded-full bg-amber-100 group-hover:bg-amber-200 flex items-center justify-center transition-colors">
+                <Bookmark className="w-6 h-6 text-amber-600" />
+              </div>
+              <span className="font-medium text-slate-900">{savedJobs?.length || 0}</span>
+              <span className="text-sm text-slate-500">Saved Jobs</span>
+            </Link>
+
+            {/* Application Tracker */}
+            <Link
+              to="/applications"
+              className="flex flex-col items-center gap-2 p-4 rounded-xl bg-blue-50 hover:bg-blue-100 transition-colors group"
+            >
+              <div className="w-12 h-12 rounded-full bg-blue-100 group-hover:bg-blue-200 flex items-center justify-center transition-colors">
+                <ClipboardList className="w-6 h-6 text-blue-600" />
+              </div>
+              <span className="font-medium text-slate-900">{applications?.length || 0}</span>
+              <span className="text-sm text-slate-500">Applications</span>
+            </Link>
+
+            {/* Learning / CEUs */}
+            <Link
+              to="/learning"
+              className="flex flex-col items-center gap-2 p-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 transition-colors group"
+            >
+              <div className="w-12 h-12 rounded-full bg-emerald-100 group-hover:bg-emerald-200 flex items-center justify-center transition-colors">
+                <GraduationCap className="w-6 h-6 text-emerald-600" />
+              </div>
+              <span className="font-medium text-slate-900">CEUs</span>
+              <span className="text-sm text-slate-500">Learning</span>
+            </Link>
+
+            {/* Chat - Coming Soon */}
+            <div className="flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-50 opacity-60 cursor-not-allowed relative">
+              <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-slate-200 text-slate-500 text-[10px] font-medium rounded">
+                Soon
+              </div>
+              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
+                <MessageCircle className="w-6 h-6 text-slate-400" />
+              </div>
+              <span className="font-medium text-slate-500">-</span>
+              <span className="text-sm text-slate-400">Chat</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Go Back to Jobs Button + Upgrade Banner */}
       {!canSeePremiumContent && (
         <>
@@ -238,7 +301,7 @@ export default function Dashboard() {
                   Unlock all dashboard features, facility ratings, map and more for <span className="font-semibold text-white">$9</span>!
                 </p>
                 <p className="text-primary-200 text-xs mt-1">
-                  Built by an ICU nurse of 10 years and IT husband
+                  Built by Virginia nurses, for Virginia nurses
                 </p>
               </div>
               <Link

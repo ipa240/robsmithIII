@@ -1,14 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from 'react-oidc-context'
 import { isAdminUnlocked } from '../hooks/useSubscription'
-import { api } from '../api/client'
-import { Link } from 'react-router-dom'
+import { api, setAuthToken } from '../api/client'
 import {
-  MessageSquare, Users, TrendingUp, Plus, ThumbsUp, Eye, Clock,
-  ChevronRight, Pin, Lock, User, Send, Flag, X, ArrowUp, ArrowDown,
-  Edit2, Trash2, MoreVertical, Lightbulb, Loader2, Sparkles
+  MessageSquare, Users, Plus, ThumbsUp, Eye, Clock,
+  ChevronRight, Pin, Lock, User, Send, X, ArrowUp, ArrowDown,
+  Edit2, Trash2, Lightbulb, Loader2, Sparkles
 } from 'lucide-react'
+import { SEO } from '../components/SEO'
 
 interface Category {
   id: string
@@ -59,14 +59,20 @@ export default function Community() {
   const auth = useAuth()
   const queryClient = useQueryClient()
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+
+  // Set auth token for API calls
+  useEffect(() => {
+    if (auth.user?.access_token) {
+      setAuthToken(auth.user.access_token)
+    }
+  }, [auth.user?.access_token])
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
   const [showNewPost, setShowNewPost] = useState(false)
   const [newPost, setNewPost] = useState({ title: '', content: '', is_anonymous: false, category_id: '' })
   const [newReply, setNewReply] = useState('')
-  const [replyingTo, setReplyingTo] = useState<string | null>(null)
+  const [isReplyAnonymous, setIsReplyAnonymous] = useState(false)
   const [editingPost, setEditingPost] = useState<Post | null>(null)
   const [editPost, setEditPost] = useState({ title: '', content: '' })
-  const [showPostMenu, setShowPostMenu] = useState<string | null>(null)
   const [showSuggestCategory, setShowSuggestCategory] = useState(false)
   const [newCategory, setNewCategory] = useState({ name: '', description: '', icon: 'MessageSquare' })
 
@@ -101,32 +107,196 @@ export default function Community() {
 
   const createPost = useMutation({
     mutationFn: (data: typeof newPost) => api.post('/api/community/posts', data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['community-posts'] })
-      queryClient.invalidateQueries({ queryKey: ['community-categories'] })
+    onMutate: async (data) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['community-posts'] })
+      await queryClient.cancelQueries({ queryKey: ['community-categories'] })
+
+      // Snapshot previous values
+      const previousPosts = queryClient.getQueryData<Post[]>(['community-posts', selectedCategory])
+      const previousCategories = queryClient.getQueryData<Category[]>(['community-categories'])
+
+      // Find category info for optimistic update
+      const selectedCat = categories.find(c => c.id === data.category_id)
+
+      // Optimistically add new post
+      const optimisticPost: Post = {
+        id: `temp-${Date.now()}`,
+        category_id: data.category_id,
+        category_name: selectedCat?.name || '',
+        author_name: currentUser?.display_name || 'You',
+        author_id: currentUser?.id || '',
+        title: data.title,
+        content: data.content,
+        is_anonymous: data.is_anonymous,
+        is_pinned: false,
+        is_locked: false,
+        upvotes: 0,
+        reply_count: 0,
+        view_count: 0,
+        created_at: new Date().toISOString(),
+        user_voted: null
+      }
+
+      queryClient.setQueryData<Post[]>(['community-posts', selectedCategory], (old = []) => [optimisticPost, ...old])
+
+      // Update category post count
+      if (previousCategories) {
+        queryClient.setQueryData<Category[]>(['community-categories'],
+          previousCategories.map(c => c.id === data.category_id ? { ...c, post_count: c.post_count + 1 } : c)
+        )
+      }
+
+      // Close modal immediately
       setShowNewPost(false)
       setNewPost({ title: '', content: '', is_anonymous: false, category_id: '' })
+
+      return { previousPosts, previousCategories }
     },
-    onError: (error: any) => {
+    onError: (error: any, _variables, context) => {
+      // Roll back on error
+      if (context?.previousPosts) {
+        queryClient.setQueryData(['community-posts', selectedCategory], context.previousPosts)
+      }
+      if (context?.previousCategories) {
+        queryClient.setQueryData(['community-categories'], context.previousCategories)
+      }
       console.error('Post creation error:', error)
       alert(error.response?.data?.detail || 'Failed to create post. Please try again.')
+    },
+    onSettled: () => {
+      // Refetch to sync with server
+      queryClient.invalidateQueries({ queryKey: ['community-posts'] })
+      queryClient.invalidateQueries({ queryKey: ['community-categories'] })
     }
   })
 
   const createReply = useMutation({
     mutationFn: (data: { post_id: string; content: string; is_anonymous: boolean; parent_reply_id?: string }) =>
       api.post(`/api/community/posts/${data.post_id}/replies`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['post-replies'] })
+    onMutate: async (data) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['post-replies', data.post_id] })
+      await queryClient.cancelQueries({ queryKey: ['community-posts'] })
+
+      // Snapshot previous values
+      const previousReplies = queryClient.getQueryData<Reply[]>(['post-replies', data.post_id])
+      const previousPosts = queryClient.getQueryData<Post[]>(['community-posts', selectedCategory])
+
+      // Optimistically add new reply
+      const optimisticReply: Reply = {
+        id: `temp-${Date.now()}`,
+        post_id: data.post_id,
+        author_name: data.is_anonymous ? 'Anonymous' : (currentUser?.display_name || 'You'),
+        author_id: currentUser?.id || '',
+        content: data.content,
+        is_anonymous: data.is_anonymous,
+        upvotes: 0,
+        created_at: new Date().toISOString(),
+        parent_reply_id: data.parent_reply_id || null,
+        user_voted: null
+      }
+
+      queryClient.setQueryData<Reply[]>(['post-replies', data.post_id], (old = []) => [...old, optimisticReply])
+
+      // Update reply count on the post
+      if (previousPosts) {
+        queryClient.setQueryData<Post[]>(['community-posts', selectedCategory],
+          previousPosts.map(p => p.id === data.post_id ? { ...p, reply_count: p.reply_count + 1 } : p)
+        )
+      }
+
+      // Also update selectedPost's reply_count if it matches
+      if (selectedPost && selectedPost.id === data.post_id) {
+        setSelectedPost({ ...selectedPost, reply_count: selectedPost.reply_count + 1 })
+      }
+
+      // Clear input immediately
       setNewReply('')
-      setReplyingTo(null)
+      setIsReplyAnonymous(false)
+
+      return { previousReplies, previousPosts }
+    },
+    onError: (_error, data, context) => {
+      // Roll back on error
+      if (context?.previousReplies) {
+        queryClient.setQueryData(['post-replies', data.post_id], context.previousReplies)
+      }
+      if (context?.previousPosts) {
+        queryClient.setQueryData(['community-posts', selectedCategory], context.previousPosts)
+      }
+    },
+    onSettled: (_data, _error, variables) => {
+      // Refetch to sync with server
+      queryClient.invalidateQueries({ queryKey: ['post-replies', variables.post_id] })
+      queryClient.invalidateQueries({ queryKey: ['community-posts'] })
     }
   })
 
   const vote = useMutation({
     mutationFn: (data: { type: 'post' | 'reply'; id: string; direction: 'up' | 'down' }) =>
       api.post(`/api/community/${data.type}s/${data.id}/vote`, { direction: data.direction }),
-    onSuccess: () => {
+    onMutate: async (data) => {
+      await queryClient.cancelQueries({ queryKey: ['community-posts'] })
+      await queryClient.cancelQueries({ queryKey: ['post-replies'] })
+
+      const previousPosts = queryClient.getQueryData<Post[]>(['community-posts', selectedCategory])
+      const previousReplies = selectedPost ? queryClient.getQueryData<Reply[]>(['post-replies', selectedPost.id]) : null
+
+      if (data.type === 'post') {
+        // Update posts list
+        queryClient.setQueryData<Post[]>(['community-posts', selectedCategory], (old = []) =>
+          old.map(p => {
+            if (p.id !== data.id) return p
+            const wasVoted = p.user_voted
+            const newVote = wasVoted === data.direction ? null : data.direction
+            let upvoteDelta = 0
+            if (wasVoted === 'up' && newVote !== 'up') upvoteDelta--
+            if (wasVoted === 'down' && newVote !== 'down') upvoteDelta++
+            if (newVote === 'up' && wasVoted !== 'up') upvoteDelta++
+            if (newVote === 'down' && wasVoted !== 'down') upvoteDelta--
+            return { ...p, upvotes: p.upvotes + upvoteDelta, user_voted: newVote }
+          })
+        )
+        // Also update selectedPost if it matches
+        if (selectedPost && selectedPost.id === data.id) {
+          const wasVoted = selectedPost.user_voted
+          const newVote = wasVoted === data.direction ? null : data.direction
+          let upvoteDelta = 0
+          if (wasVoted === 'up' && newVote !== 'up') upvoteDelta--
+          if (wasVoted === 'down' && newVote !== 'down') upvoteDelta++
+          if (newVote === 'up' && wasVoted !== 'up') upvoteDelta++
+          if (newVote === 'down' && wasVoted !== 'down') upvoteDelta--
+          setSelectedPost({ ...selectedPost, upvotes: selectedPost.upvotes + upvoteDelta, user_voted: newVote })
+        }
+      } else {
+        // Update replies
+        queryClient.setQueryData<Reply[]>(['post-replies', selectedPost?.id], (old = []) =>
+          old.map(r => {
+            if (r.id !== data.id) return r
+            const wasVoted = r.user_voted
+            const newVote = wasVoted === data.direction ? null : data.direction
+            let upvoteDelta = 0
+            if (wasVoted === 'up' && newVote !== 'up') upvoteDelta--
+            if (wasVoted === 'down' && newVote !== 'down') upvoteDelta++
+            if (newVote === 'up' && wasVoted !== 'up') upvoteDelta++
+            if (newVote === 'down' && wasVoted !== 'down') upvoteDelta--
+            return { ...r, upvotes: r.upvotes + upvoteDelta, user_voted: newVote }
+          })
+        )
+      }
+
+      return { previousPosts, previousReplies }
+    },
+    onError: (_error, data, context) => {
+      if (context?.previousPosts) {
+        queryClient.setQueryData(['community-posts', selectedCategory], context.previousPosts)
+      }
+      if (context?.previousReplies && selectedPost) {
+        queryClient.setQueryData(['post-replies', selectedPost.id], context.previousReplies)
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['community-posts'] })
       queryClient.invalidateQueries({ queryKey: ['post-replies'] })
     }
@@ -144,16 +314,54 @@ export default function Community() {
 
   const deletePost = useMutation({
     mutationFn: (id: string) => api.delete(`/api/community/posts/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['community-posts'] })
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['community-posts'] })
+      const previousPosts = queryClient.getQueryData<Post[]>(['community-posts', selectedCategory])
+
+      // Optimistically remove the post
+      queryClient.setQueryData<Post[]>(['community-posts', selectedCategory], (old = []) =>
+        old.filter(p => p.id !== id)
+      )
+
       setSelectedPost(null)
+      return { previousPosts }
+    },
+    onError: (_error, _id, context) => {
+      if (context?.previousPosts) {
+        queryClient.setQueryData(['community-posts', selectedCategory], context.previousPosts)
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['community-posts'] })
+      queryClient.invalidateQueries({ queryKey: ['community-categories'] })
     }
   })
 
   const deleteReply = useMutation({
     mutationFn: (id: string) => api.delete(`/api/community/replies/${id}`),
-    onSuccess: () => {
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['post-replies'] })
+      const previousReplies = selectedPost ? queryClient.getQueryData<Reply[]>(['post-replies', selectedPost.id]) : null
+
+      // Optimistically remove the reply
+      if (selectedPost) {
+        queryClient.setQueryData<Reply[]>(['post-replies', selectedPost.id], (old = []) =>
+          old.filter(r => r.id !== id)
+        )
+        // Update reply count
+        setSelectedPost({ ...selectedPost, reply_count: selectedPost.reply_count - 1 })
+      }
+
+      return { previousReplies }
+    },
+    onError: (_error, _id, context) => {
+      if (context?.previousReplies && selectedPost) {
+        queryClient.setQueryData(['post-replies', selectedPost.id], context.previousReplies)
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['post-replies'] })
+      queryClient.invalidateQueries({ queryKey: ['community-posts'] })
     }
   })
 
@@ -162,7 +370,6 @@ export default function Community() {
     onSuccess: () => {
       setShowSuggestCategory(false)
       setNewCategory({ name: '', description: '', icon: 'MessageSquare' })
-      // Show success message
       alert('Category suggestion submitted! It will appear once approved by an admin.')
     },
     onError: (error: any) => {
@@ -242,43 +449,6 @@ export default function Community() {
             </div>
           </div>
 
-          {/* Demo Stats */}
-          <div className="grid grid-cols-3 gap-4 mb-6 opacity-50">
-            <div className="bg-white rounded-xl border border-slate-200 p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
-                  <Users className="w-5 h-5 text-primary-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-slate-900">2,847</p>
-                  <p className="text-sm text-slate-500">Members</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-accent-100 rounded-lg flex items-center justify-center">
-                  <MessageSquare className="w-5 h-5 text-accent-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-slate-900">1,234</p>
-                  <p className="text-sm text-slate-500">Discussions</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                  <TrendingUp className="w-5 h-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-slate-900">+127</p>
-                  <p className="text-sm text-slate-500">This Week</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* Demo Categories */}
           <div className="bg-white rounded-xl border border-slate-200 p-4 opacity-50">
             <h3 className="font-semibold text-slate-900 mb-3">Popular Topics</h3>
@@ -297,16 +467,20 @@ export default function Community() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      <SEO
+        title="Nurse Community"
+        description="Connect with nurses across Virginia. Share experiences, ask questions, and get advice from fellow healthcare professionals in our community forums."
+        canonical="https://vanurses.net/community"
+      />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Community</h1>
-          <p className="text-slate-600">Connect with nurses across Virginia</p>
+          <p className="text-slate-600 text-sm">Connect with nurses across Virginia</p>
         </div>
         <button
           onClick={() => {
-            // Pre-fill category if one is selected
             const selectedCat = categories.find(c => c.slug === selectedCategory)
             setNewPost({
               title: '',
@@ -316,74 +490,37 @@ export default function Community() {
             })
             setShowNewPost(true)
           }}
-          className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+          className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium"
         >
           <Plus className="w-4 h-4" />
           New Post
         </button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
-              <Users className="w-5 h-5 text-primary-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-slate-900">2,847</p>
-              <p className="text-sm text-slate-500">Members</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-accent-100 rounded-lg flex items-center justify-center">
-              <MessageSquare className="w-5 h-5 text-accent-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-slate-900">{posts.length}</p>
-              <p className="text-sm text-slate-500">Discussions</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-slate-900">+127</p>
-              <p className="text-sm text-slate-500">This Week</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid lg:grid-cols-4 gap-6">
-        {/* Categories Sidebar */}
-        <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-slate-900">Categories</h3>
+      <div className="flex gap-4">
+        {/* Categories Sidebar - Narrower */}
+        <div className="w-52 flex-shrink-0 space-y-3">
+          <div className="bg-white rounded-xl border border-slate-200 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-slate-900 text-sm">Categories</h3>
               <button
                 onClick={() => setShowSuggestCategory(true)}
-                className="p-1.5 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg"
+                className="p-1 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded"
                 title="Suggest a category"
               >
-                <Lightbulb className="w-4 h-4" />
+                <Lightbulb className="w-3.5 h-3.5" />
               </button>
             </div>
             {categoriesLoading ? (
               <div className="flex items-center justify-center py-4">
-                <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+                <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
               </div>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 <button
                   onClick={() => setSelectedCategory(null)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm ${
-                    selectedCategory === null ? 'bg-primary-50 text-primary-700' : 'hover:bg-slate-50'
+                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-sm ${
+                    selectedCategory === null ? 'bg-primary-50 text-primary-700 font-medium' : 'hover:bg-slate-50 text-slate-600'
                   }`}
                 >
                   All Discussions
@@ -392,31 +529,31 @@ export default function Community() {
                   <button
                     key={cat.id}
                     onClick={() => setSelectedCategory(cat.slug)}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm flex justify-between ${
-                      selectedCategory === cat.slug ? 'bg-primary-50 text-primary-700' : 'hover:bg-slate-50'
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-sm flex justify-between ${
+                      selectedCategory === cat.slug ? 'bg-primary-50 text-primary-700 font-medium' : 'hover:bg-slate-50 text-slate-600'
                     }`}
                   >
-                    <span>{cat.name}</span>
-                    <span className="text-slate-400">{cat.post_count}</span>
+                    <span className="truncate">{cat.name}</span>
+                    <span className="text-slate-400 text-xs">{cat.post_count}</span>
                   </button>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Trending */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <h3 className="font-semibold text-slate-900 mb-3">Trending</h3>
-            <div className="space-y-3">
-              {trending.slice(0, 5).map((post, i) => (
+          {/* Trending - Compact */}
+          <div className="bg-white rounded-xl border border-slate-200 p-3">
+            <h3 className="font-semibold text-slate-900 text-sm mb-2">Trending</h3>
+            <div className="space-y-2">
+              {trending.slice(0, 4).map((post, i) => (
                 <button
                   key={post.id}
                   onClick={() => setSelectedPost(post)}
                   className="w-full text-left group"
                 >
-                  <div className="flex gap-2">
-                    <span className="text-slate-400 font-medium">{i + 1}.</span>
-                    <p className="text-sm text-slate-700 group-hover:text-primary-600 line-clamp-2">
+                  <div className="flex gap-1.5">
+                    <span className="text-slate-400 text-xs font-medium">{i + 1}.</span>
+                    <p className="text-xs text-slate-600 group-hover:text-primary-600 line-clamp-2 leading-tight">
                       {post.title}
                     </p>
                   </div>
@@ -425,268 +562,309 @@ export default function Community() {
             </div>
           </div>
 
-          {/* Community Guidelines */}
-          <div className="bg-slate-50 rounded-xl p-4">
-            <h3 className="font-semibold text-slate-900 mb-2">Community Guidelines</h3>
-            <ul className="text-xs text-slate-600 space-y-1">
-              <li>- Be respectful and professional</li>
+          {/* Guidelines - Very Compact */}
+          <div className="bg-slate-50 rounded-xl p-3">
+            <h3 className="font-semibold text-slate-900 text-xs mb-1.5">Guidelines</h3>
+            <ul className="text-xs text-slate-500 space-y-0.5">
+              <li>- Be respectful</li>
               <li>- No HIPAA violations</li>
-              <li>- No spam or self-promotion</li>
-              <li>- Report inappropriate content</li>
+              <li>- No spam</li>
             </ul>
           </div>
         </div>
 
         {/* Posts List */}
-        <div className="lg:col-span-3">
-          {selectedPost ? (
-            /* Post Detail View */
-            <div className="bg-white rounded-xl border border-slate-200">
-              <div className="p-4 border-b border-slate-200">
-                <button
-                  onClick={() => setSelectedPost(null)}
-                  className="text-sm text-slate-500 hover:text-slate-700 mb-3"
-                >
-                  Back to discussions
-                </button>
-                <div className="flex items-start gap-4">
-                  <div className="flex flex-col items-center gap-1">
+        <div className="flex-1 space-y-2">
+          {posts.length === 0 ? (
+            <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+              <MessageSquare className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-500 text-sm">No posts in this category yet</p>
+              <button
+                onClick={() => setShowNewPost(true)}
+                className="mt-3 text-primary-600 hover:underline text-sm"
+              >
+                Be the first to post!
+              </button>
+            </div>
+          ) : (
+            posts.map(post => (
+              <div
+                key={post.id}
+                className={`bg-white rounded-xl border p-3 hover:shadow-md transition-all cursor-pointer ${
+                  selectedPost?.id === post.id ? 'border-primary-300 shadow-md' : 'border-slate-200 hover:border-primary-200'
+                }`}
+                onClick={() => setSelectedPost(post)}
+              >
+                <div className="flex items-start gap-3">
+                  {/* Compact inline voting */}
+                  <div className="flex items-center gap-0.5 bg-slate-50 rounded-lg px-1.5 py-1">
                     <button
-                      onClick={() => vote.mutate({ type: 'post', id: selectedPost.id, direction: 'up' })}
-                      className={`p-1 rounded ${selectedPost.user_voted === 'up' ? 'text-primary-600' : 'text-slate-400 hover:text-slate-600'}`}
+                      onClick={e => {
+                        e.stopPropagation()
+                        vote.mutate({ type: 'post', id: post.id, direction: 'up' })
+                      }}
+                      className={`p-0.5 rounded ${post.user_voted === 'up' ? 'text-primary-600' : 'text-slate-400 hover:text-primary-600'}`}
                     >
-                      <ArrowUp className="w-5 h-5" />
+                      <ArrowUp className="w-3.5 h-3.5" />
                     </button>
-                    <span className="font-medium text-slate-900">{selectedPost.upvotes}</span>
+                    <span className="text-xs font-semibold min-w-[20px] text-center text-slate-700">{post.upvotes}</span>
                     <button
-                      onClick={() => vote.mutate({ type: 'post', id: selectedPost.id, direction: 'down' })}
-                      className={`p-1 rounded ${selectedPost.user_voted === 'down' ? 'text-red-600' : 'text-slate-400 hover:text-slate-600'}`}
+                      onClick={e => {
+                        e.stopPropagation()
+                        vote.mutate({ type: 'post', id: post.id, direction: 'down' })
+                      }}
+                      className={`p-0.5 rounded ${post.user_voted === 'down' ? 'text-red-500' : 'text-slate-400 hover:text-red-500'}`}
                     >
-                      <ArrowDown className="w-5 h-5" />
+                      <ArrowDown className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      {selectedPost.is_pinned && (
-                        <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium">
-                          <Pin className="w-3 h-3 inline mr-1" />Pinned
+
+                  <div className="flex-1 min-w-0">
+                    {/* Title with badges */}
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      {post.is_pinned && (
+                        <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium flex items-center gap-0.5">
+                          <Pin className="w-2.5 h-2.5" />
                         </span>
                       )}
-                      <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-xs">
-                        {selectedPost.category_name}
+                      {post.is_locked && (
+                        <Lock className="w-3 h-3 text-slate-400" />
+                      )}
+                      <span className="px-2 py-0.5 bg-primary-50 text-primary-700 rounded-full text-xs font-medium">
+                        {post.category_name}
                       </span>
                     </div>
-                    <h2 className="text-xl font-bold text-slate-900 mb-2">{selectedPost.title}</h2>
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3 text-sm text-slate-500">
-                        <span className="flex items-center gap-1">
-                          <User className="w-4 h-4" />
-                          {selectedPost.is_anonymous ? 'Anonymous' : selectedPost.author_name}
-                        </span>
-                        <span>{formatDate(selectedPost.created_at)}</span>
-                        <span className="flex items-center gap-1">
-                          <Eye className="w-4 h-4" />
-                          {selectedPost.view_count}
-                        </span>
-                      </div>
-                      {/* Edit/Delete buttons - only show for post owner */}
-                      {currentUser?.id === selectedPost.author_id && (
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setEditPost({ title: selectedPost.title, content: selectedPost.content })
-                              setEditingPost(selectedPost)
-                            }}
-                            className="p-2 text-slate-400 hover:text-primary-600 hover:bg-slate-100 rounded-lg"
-                            title="Edit post"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              if (confirm('Are you sure you want to delete this post?')) {
-                                deletePost.mutate(selectedPost.id)
-                              }
-                            }}
-                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                            title="Delete post"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    <div className="prose prose-slate max-w-none">
-                      <p className="whitespace-pre-wrap">{selectedPost.content}</p>
+                    <h3 className="font-semibold text-slate-900 line-clamp-1 text-sm">{post.title}</h3>
+                    <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">{post.content}</p>
+
+                    {/* Compact metadata row */}
+                    <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-400">
+                      <span>{post.is_anonymous ? 'Anonymous' : post.author_name}</span>
+                      <span>-</span>
+                      <span>{formatDate(post.created_at)}</span>
+                      <span className="flex items-center gap-0.5">
+                        <MessageSquare className="w-3 h-3" />
+                        {post.reply_count}
+                      </span>
+                      <span className="flex items-center gap-0.5">
+                        <Eye className="w-3 h-3" />
+                        {post.view_count}
+                      </span>
                     </div>
                   </div>
+
+                  <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
                 </div>
               </div>
+            ))
+          )}
+        </div>
+      </div>
 
-              {/* Replies */}
-              <div className="p-4">
-                <h3 className="font-semibold text-slate-900 mb-4">
+      {/* Slide-out Post Panel */}
+      {selectedPost && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/20 z-40"
+            onClick={() => setSelectedPost(null)}
+          />
+
+          {/* Panel */}
+          <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl z-50 flex flex-col animate-slide-in-right">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
+              <button
+                onClick={() => setSelectedPost(null)}
+                className="flex items-center gap-1.5 text-slate-500 hover:text-slate-700 text-sm"
+              >
+                <X className="w-4 h-4" />
+                Close
+              </button>
+              <div className="flex items-center gap-2">
+                {selectedPost.is_pinned && (
+                  <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium flex items-center gap-1">
+                    <Pin className="w-3 h-3" /> Pinned
+                  </span>
+                )}
+                <span className="px-2 py-0.5 bg-primary-50 text-primary-700 rounded-full text-xs font-medium">
+                  {selectedPost.category_name}
+                </span>
+              </div>
+            </div>
+
+            {/* Scrollable Content - Chat-like layout */}
+            <div className="flex-1 overflow-y-auto flex flex-col">
+              {/* Post Content - Fixed at top */}
+              <div className="p-4 border-b border-slate-100 bg-white">
+                <div className="flex items-start gap-3 mb-3">
+                  {/* Voting */}
+                  <div className="flex flex-col items-center gap-0.5 bg-slate-50 rounded-lg px-2 py-1">
+                    <button
+                      onClick={() => vote.mutate({ type: 'post', id: selectedPost.id, direction: 'up' })}
+                      className={`p-1 rounded ${selectedPost.user_voted === 'up' ? 'text-primary-600' : 'text-slate-400 hover:text-primary-600'}`}
+                    >
+                      <ArrowUp className="w-4 h-4" />
+                    </button>
+                    <span className="text-sm font-semibold text-slate-700">{selectedPost.upvotes}</span>
+                    <button
+                      onClick={() => vote.mutate({ type: 'post', id: selectedPost.id, direction: 'down' })}
+                      className={`p-1 rounded ${selectedPost.user_voted === 'down' ? 'text-red-500' : 'text-slate-400 hover:text-red-500'}`}
+                    >
+                      <ArrowDown className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="flex-1">
+                    <h2 className="text-lg font-bold text-slate-900 mb-1">{selectedPost.title}</h2>
+                    <div className="flex items-center gap-2 text-xs text-slate-500 mb-3">
+                      <span className="flex items-center gap-1">
+                        <User className="w-3 h-3" />
+                        {selectedPost.is_anonymous ? 'Anonymous' : selectedPost.author_name}
+                      </span>
+                      <span>-</span>
+                      <span>{formatDate(selectedPost.created_at)}</span>
+                      <span className="flex items-center gap-1">
+                        <Eye className="w-3 h-3" />
+                        {selectedPost.view_count}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Edit/Delete for owner */}
+                  {currentUser?.id === selectedPost.author_id && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setEditPost({ title: selectedPost.title, content: selectedPost.content })
+                          setEditingPost(selectedPost)
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-primary-600 hover:bg-slate-100 rounded"
+                        title="Edit"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm('Delete this post?')) {
+                            deletePost.mutate(selectedPost.id)
+                          }
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-slate-700 text-sm whitespace-pre-wrap leading-relaxed">{selectedPost.content}</p>
+              </div>
+
+              {/* Replies - Chat message style (newest at bottom) */}
+              <div className="flex-1 p-4 bg-gradient-to-b from-slate-50 to-white">
+                <h4 className="font-semibold text-slate-900 text-sm mb-3">
                   {replies.length} {replies.length === 1 ? 'Reply' : 'Replies'}
-                </h3>
+                </h4>
 
-                {!selectedPost.is_locked && (
-                  <div className="mb-6">
+                {replies.length === 0 ? (
+                  <p className="text-slate-500 text-sm text-center py-6">No replies yet. Be the first!</p>
+                ) : (
+                  <div className="space-y-2">
+                    {replies.map(reply => (
+                      <div key={reply.id} className="flex gap-2 p-3 bg-white rounded-lg shadow-sm border border-slate-100">
+                        {/* Reply voting */}
+                        <div className="flex flex-col items-center gap-0">
+                          <button
+                            onClick={() => vote.mutate({ type: 'reply', id: reply.id, direction: 'up' })}
+                            className={`p-0.5 rounded ${reply.user_voted === 'up' ? 'text-primary-600' : 'text-slate-400 hover:text-primary-600'}`}
+                          >
+                            <ArrowUp className="w-3 h-3" />
+                          </button>
+                          <span className="text-xs font-medium text-slate-600">{reply.upvotes}</span>
+                          <button
+                            onClick={() => vote.mutate({ type: 'reply', id: reply.id, direction: 'down' })}
+                            className={`p-0.5 rounded ${reply.user_voted === 'down' ? 'text-red-500' : 'text-slate-400 hover:text-red-500'}`}
+                          >
+                            <ArrowDown className="w-3 h-3" />
+                          </button>
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-slate-900 text-sm">
+                                {reply.is_anonymous ? 'Anonymous' : reply.author_name}
+                              </span>
+                              <span className="text-xs text-slate-400">{formatDate(reply.created_at)}</span>
+                            </div>
+                            {currentUser?.id === reply.author_id && (
+                              <button
+                                onClick={() => {
+                                  if (confirm('Delete this reply?')) {
+                                    deleteReply.mutate(reply.id)
+                                  }
+                                }}
+                                className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-slate-700 text-sm whitespace-pre-wrap">{reply.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Reply Input - Fixed at BOTTOM like text messages */}
+            {!selectedPost.is_locked && (
+              <div className="p-3 bg-white border-t border-slate-200">
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1">
                     <textarea
                       value={newReply}
                       onChange={e => setNewReply(e.target.value)}
                       placeholder="Write a reply..."
-                      className="w-full px-4 py-3 border border-slate-300 rounded-lg resize-none"
-                      rows={3}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg resize-none text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      rows={2}
                     />
-                    <div className="flex items-center justify-between mt-2">
-                      <label className="flex items-center gap-2 text-sm text-slate-600">
-                        <input type="checkbox" className="rounded" />
-                        Post anonymously
-                      </label>
-                      <button
-                        onClick={() => createReply.mutate({
-                          post_id: selectedPost.id,
-                          content: newReply,
-                          is_anonymous: false
-                        })}
-                        disabled={!newReply.trim()}
-                        className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
-                      >
-                        <Send className="w-4 h-4" />
-                        Reply
-                      </button>
-                    </div>
+                    <label className="flex items-center gap-2 text-xs text-slate-500 mt-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="rounded border-slate-300 w-3 h-3"
+                        checked={isReplyAnonymous}
+                        onChange={(e) => setIsReplyAnonymous(e.target.checked)}
+                      />
+                      Anonymous
+                    </label>
                   </div>
-                )}
-
-                <div className="space-y-4">
-                  {replies.map(reply => (
-                    <div key={reply.id} className="flex gap-3 p-4 bg-slate-50 rounded-lg">
-                      <div className="flex flex-col items-center gap-1">
-                        <button
-                          onClick={() => vote.mutate({ type: 'reply', id: reply.id, direction: 'up' })}
-                          className={`p-0.5 rounded ${reply.user_voted === 'up' ? 'text-primary-600' : 'text-slate-400 hover:text-slate-600'}`}
-                        >
-                          <ArrowUp className="w-4 h-4" />
-                        </button>
-                        <span className="text-sm font-medium text-slate-700">{reply.upvotes}</span>
-                        <button
-                          onClick={() => vote.mutate({ type: 'reply', id: reply.id, direction: 'down' })}
-                          className={`p-0.5 rounded ${reply.user_voted === 'down' ? 'text-red-600' : 'text-slate-400 hover:text-slate-600'}`}
-                        >
-                          <ArrowDown className="w-4 h-4" />
-                        </button>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-slate-900">
-                              {reply.is_anonymous ? 'Anonymous' : reply.author_name}
-                            </span>
-                            <span className="text-xs text-slate-500">{formatDate(reply.created_at)}</span>
-                          </div>
-                          {currentUser?.id === reply.author_id && (
-                            <button
-                              onClick={() => {
-                                if (confirm('Are you sure you want to delete this reply?')) {
-                                  deleteReply.mutate(reply.id)
-                                }
-                              }}
-                              className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
-                              title="Delete reply"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          )}
-                        </div>
-                        <p className="text-slate-700 whitespace-pre-wrap">{reply.content}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : (
-            /* Posts List View */
-            <div className="space-y-4">
-              {posts.length === 0 ? (
-                <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-                  <MessageSquare className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                  <p className="text-slate-500">No posts in this category yet</p>
                   <button
-                    onClick={() => setShowNewPost(true)}
-                    className="mt-4 text-primary-600 hover:underline"
+                    onClick={() => createReply.mutate({
+                      post_id: selectedPost.id,
+                      content: newReply,
+                      is_anonymous: isReplyAnonymous
+                    })}
+                    disabled={!newReply.trim() || createReply.isPending}
+                    className="flex items-center justify-center w-10 h-10 bg-primary-600 text-white rounded-full hover:bg-primary-700 disabled:opacity-50 flex-shrink-0"
                   >
-                    Be the first to post!
+                    {createReply.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
-              ) : (
-                posts.map(post => (
-                  <div
-                    key={post.id}
-                    className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md transition-shadow cursor-pointer"
-                    onClick={() => setSelectedPost(post)}
-                  >
-                    <div className="flex gap-4">
-                      <div className="flex flex-col items-center gap-1 pt-1">
-                        <button
-                          onClick={e => {
-                            e.stopPropagation()
-                            vote.mutate({ type: 'post', id: post.id, direction: 'up' })
-                          }}
-                          className={`p-1 rounded ${post.user_voted === 'up' ? 'text-primary-600' : 'text-slate-400 hover:text-slate-600'}`}
-                        >
-                          <ArrowUp className="w-4 h-4" />
-                        </button>
-                        <span className="text-sm font-medium text-slate-700">{post.upvotes}</span>
-                        <button
-                          onClick={e => {
-                            e.stopPropagation()
-                            vote.mutate({ type: 'post', id: post.id, direction: 'down' })
-                          }}
-                          className={`p-1 rounded ${post.user_voted === 'down' ? 'text-red-600' : 'text-slate-400 hover:text-slate-600'}`}
-                        >
-                          <ArrowDown className="w-4 h-4" />
-                        </button>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          {post.is_pinned && (
-                            <Pin className="w-3 h-3 text-amber-500" />
-                          )}
-                          {post.is_locked && (
-                            <Lock className="w-3 h-3 text-slate-400" />
-                          )}
-                          <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-xs">
-                            {post.category_name}
-                          </span>
-                        </div>
-                        <h3 className="font-semibold text-slate-900 mb-1 line-clamp-1">{post.title}</h3>
-                        <p className="text-sm text-slate-600 line-clamp-2 mb-2">{post.content}</p>
-                        <div className="flex items-center gap-4 text-xs text-slate-500">
-                          <span>{post.is_anonymous ? 'Anonymous' : post.author_name}</span>
-                          <span>{formatDate(post.created_at)}</span>
-                          <span className="flex items-center gap-1">
-                            <MessageSquare className="w-3 h-3" />
-                            {post.reply_count}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Eye className="w-3 h-3" />
-                            {post.view_count}
-                          </span>
-                        </div>
-                      </div>
-                      <ChevronRight className="w-5 h-5 text-slate-400" />
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* New Post Modal */}
       {showNewPost && (
@@ -706,7 +884,7 @@ export default function Community() {
                 <select
                   value={newPost.category_id}
                   onChange={e => setNewPost({ ...newPost, category_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                 >
                   <option value="">Select a category</option>
                   {categories.map(cat => (
@@ -722,7 +900,7 @@ export default function Community() {
                   value={newPost.title}
                   onChange={e => setNewPost({ ...newPost, title: e.target.value })}
                   placeholder="What's on your mind?"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                 />
               </div>
 
@@ -732,7 +910,7 @@ export default function Community() {
                   value={newPost.content}
                   onChange={e => setNewPost({ ...newPost, content: e.target.value })}
                   placeholder="Share your thoughts..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg resize-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg resize-none text-sm"
                   rows={5}
                 />
               </div>
@@ -750,7 +928,7 @@ export default function Community() {
               <div className="flex gap-3 pt-4">
                 <button
                   onClick={() => setShowNewPost(false)}
-                  className="flex-1 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50"
+                  className="flex-1 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 text-sm font-medium"
                   disabled={createPost.isPending}
                 >
                   Cancel
@@ -758,7 +936,7 @@ export default function Community() {
                 <button
                   onClick={() => createPost.mutate(newPost)}
                   disabled={!newPost.title.trim() || !newPost.category_id || createPost.isPending}
-                  className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center gap-2 text-sm font-medium"
                 >
                   {createPost.isPending ? (
                     <>
@@ -794,7 +972,7 @@ export default function Community() {
                   type="text"
                   value={editPost.title}
                   onChange={e => setEditPost({ ...editPost, title: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                 />
               </div>
 
@@ -803,7 +981,7 @@ export default function Community() {
                 <textarea
                   value={editPost.content}
                   onChange={e => setEditPost({ ...editPost, content: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg resize-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg resize-none text-sm"
                   rows={5}
                 />
               </div>
@@ -811,14 +989,14 @@ export default function Community() {
               <div className="flex gap-3 pt-4">
                 <button
                   onClick={() => setEditingPost(null)}
-                  className="flex-1 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50"
+                  className="flex-1 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 text-sm font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => updatePost.mutate({ id: editingPost.id, ...editPost })}
                   disabled={!editPost.title.trim() || !editPost.content.trim()}
-                  className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                  className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm font-medium"
                 >
                   Save Changes
                 </button>
@@ -852,7 +1030,7 @@ export default function Community() {
                   value={newCategory.name}
                   onChange={e => setNewCategory({ ...newCategory, name: e.target.value })}
                   placeholder="e.g., Night Shift Nurses"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                   maxLength={100}
                 />
               </div>
@@ -863,7 +1041,7 @@ export default function Community() {
                   value={newCategory.description}
                   onChange={e => setNewCategory({ ...newCategory, description: e.target.value })}
                   placeholder="What topics would this category cover?"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg resize-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg resize-none text-sm"
                   rows={3}
                 />
               </div>
@@ -873,7 +1051,7 @@ export default function Community() {
                 <select
                   value={newCategory.icon}
                   onChange={e => setNewCategory({ ...newCategory, icon: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                 >
                   {ICON_OPTIONS.map(icon => (
                     <option key={icon} value={icon}>{icon}</option>
@@ -884,14 +1062,14 @@ export default function Community() {
               <div className="flex gap-3 pt-4">
                 <button
                   onClick={() => setShowSuggestCategory(false)}
-                  className="flex-1 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50"
+                  className="flex-1 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 text-sm font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => suggestCategory.mutate(newCategory)}
                   disabled={!newCategory.name.trim() || suggestCategory.isPending}
-                  className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center gap-2 text-sm font-medium"
                 >
                   {suggestCategory.isPending ? (
                     <>
@@ -907,6 +1085,21 @@ export default function Community() {
           </div>
         </div>
       )}
+
+      {/* CSS for slide-in animation */}
+      <style>{`
+        @keyframes slide-in-right {
+          from {
+            transform: translateX(100%);
+          }
+          to {
+            transform: translateX(0);
+          }
+        }
+        .animate-slide-in-right {
+          animation: slide-in-right 0.3s ease-out;
+        }
+      `}</style>
     </div>
   )
 }

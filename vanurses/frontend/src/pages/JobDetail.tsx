@@ -5,7 +5,8 @@ import { useAuth } from 'react-oidc-context'
 import {
   ArrowLeft, MapPin, Clock, DollarSign, Building2, Bookmark, BookmarkCheck,
   ExternalLink, Calendar, Award, Stethoscope, CheckCircle, Lock, Unlock, Sparkles, Crown, Heart,
-  GraduationCap, Briefcase, Gift, Loader2, FileText, MessageCircle, Share2, Copy, Check as CheckIcon
+  GraduationCap, Briefcase, Gift, Loader2, FileText, MessageCircle, Share2, Copy, Check as CheckIcon, Users,
+  X, BellOff, ClipboardList, ArrowRight
 } from 'lucide-react'
 import { api } from '../api/client'
 import { toTitleCase } from '../utils/format'
@@ -14,6 +15,7 @@ import { useSavedJobLimit } from '../hooks/useSavedJobLimit'
 import { useSubscription, isAdminUnlocked } from '../hooks/useSubscription'
 import JobSection from '../components/JobSection'
 import { NoFilterUnlockModal, NOFILTER_STORAGE_KEY, lockNoFilter } from '../components/NoFilterUnlockModal'
+import { JobPostingSEO } from '../components/SEO'
 
 // Format nursing types for display: cna -> "CNA", rn -> "RN"
 const formatNursingType = (type: string): string => {
@@ -94,6 +96,9 @@ const formatExperience = (experience: any): string | null => {
   return null
 }
 
+// LocalStorage key for "do not remind" preference
+const TRACKER_PROMO_DISMISSED_KEY = 'vanurses_tracker_promo_dismissed'
+
 export default function JobDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -101,12 +106,15 @@ export default function JobDetail() {
   const queryClient = useQueryClient()
   const [showApplyToast, setShowApplyToast] = useState(false)
   const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null)
+  const [showTrackerPromoModal, setShowTrackerPromoModal] = useState(false)
+  const [pendingApplyUrl, setPendingApplyUrl] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'extracted' | 'original'>('extracted')
   const [showShareMenu, setShowShareMenu] = useState(false)
   const [linkCopied, setLinkCopied] = useState(false)
   const [sullyOpinion, setSullyOpinion] = useState<string | null>(null)
   const [sullyLoading, setSullyLoading] = useState(false)
   const [sullyMood, setSullyMood] = useState<'optimistic' | 'neutral' | 'stern' | 'nofilter'>('optimistic')
+  const [showMessageComingSoon, setShowMessageComingSoon] = useState(false)
   const { isPaid, canAccessJobs, isFacilities } = useSubscription()
 
   // Check if No Filter mode is unlocked (same unlock code as Sully page)
@@ -179,17 +187,73 @@ export default function JobDetail() {
   })
 
   const handleApplyClick = (job: any) => {
-    // Track the click before opening external link
-    if (auth.isAuthenticated) {
+    // Paid users get direct access with tracking
+    if (auth.isAuthenticated && isPaid) {
       trackApplyMutation.mutate({
         job_id: job.id,
         job_title: job.title,
         facility_name: job.facility_name || 'Unknown Facility',
         facility_city: job.city || ''
       })
+      window.open(job.source_url, '_blank', 'noopener,noreferrer')
+    } else {
+      // Free users (logged in or not) - check if promo was dismissed
+      const promoDismissed = localStorage.getItem(TRACKER_PROMO_DISMISSED_KEY) === 'true'
+
+      if (promoDismissed) {
+        // User chose "do not remind", track if logged in and open link
+        if (auth.isAuthenticated) {
+          trackApplyMutation.mutate({
+            job_id: job.id,
+            job_title: job.title,
+            facility_name: job.facility_name || 'Unknown Facility',
+            facility_city: job.city || ''
+          })
+        }
+        window.open(job.source_url, '_blank', 'noopener,noreferrer')
+      } else {
+        // Show the interstitial promo modal
+        setPendingApplyUrl(job.source_url)
+        setShowTrackerPromoModal(true)
+      }
     }
-    // Open the external link
-    window.open(job.source_url, '_blank', 'noopener,noreferrer')
+  }
+
+  // Handle continuing to external site after modal
+  const handleContinueToSite = () => {
+    // Track the click if user is logged in (even free users get tracking)
+    if (auth.isAuthenticated && data) {
+      trackApplyMutation.mutate({
+        job_id: data.id,
+        job_title: data.title,
+        facility_name: data.facility_name || 'Unknown Facility',
+        facility_city: data.city || ''
+      })
+    }
+    if (pendingApplyUrl) {
+      window.open(pendingApplyUrl, '_blank', 'noopener,noreferrer')
+    }
+    setShowTrackerPromoModal(false)
+    setPendingApplyUrl(null)
+  }
+
+  // Handle "do not remind me again"
+  const handleDoNotRemind = () => {
+    localStorage.setItem(TRACKER_PROMO_DISMISSED_KEY, 'true')
+    // Track the click if user is logged in (even free users get tracking)
+    if (auth.isAuthenticated && data) {
+      trackApplyMutation.mutate({
+        job_id: data.id,
+        job_title: data.title,
+        facility_name: data.facility_name || 'Unknown Facility',
+        facility_city: data.city || ''
+      })
+    }
+    if (pendingApplyUrl) {
+      window.open(pendingApplyUrl, '_blank', 'noopener,noreferrer')
+    }
+    setShowTrackerPromoModal(false)
+    setPendingApplyUrl(null)
   }
 
   // Share functions
@@ -417,6 +481,18 @@ export default function JobDetail() {
 
   return (
     <div className="max-w-4xl mx-auto">
+      {data && (
+        <JobPostingSEO
+          title={data.title || 'Nursing Position'}
+          facility={data.facility_name || 'Healthcare Facility'}
+          specialty={formatSpecialty(data.specialty || '')}
+          city={data.city || ''}
+          state={data.state || 'VA'}
+          pay={data.pay_low && data.pay_high ? `$${data.pay_low}-$${data.pay_high}/hr` : undefined}
+          jobId={data.id}
+          description={data.description}
+        />
+      )}
       <button
         onClick={() => navigate(-1)}
         className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-6"
@@ -764,6 +840,29 @@ export default function JobDetail() {
           </div>
         </div>
 
+        {/* Community Connect Section */}
+        <div className="mx-6 mt-6 flex items-center justify-between p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100 rounded-xl">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <Users className="w-6 h-6 text-indigo-600" />
+            </div>
+            <div>
+              <div className="font-semibold text-slate-900">Know someone who works here?</div>
+              <div className="text-sm text-slate-600">Connect with nurses at this facility for insider tips</div>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setShowMessageComingSoon(true)
+              setTimeout(() => setShowMessageComingSoon(false), 3000)
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+          >
+            <MessageCircle className="w-4 h-4" />
+            Message Someone Here
+          </button>
+        </div>
+
         {/* Sign-on Bonus Highlight */}
         {(job.sign_on_bonus || enrichedDetails?.parsed?.sign_on_bonus) && (
           <div className="mx-6 mt-6 flex items-center gap-4 p-4 bg-gradient-to-r from-emerald-50 to-emerald-100 border border-emerald-200 rounded-xl">
@@ -1019,16 +1118,134 @@ export default function JobDetail() {
         onUnlock={() => setNofilterUnlocked(true)}
       />
 
-      {/* Apply Tracking Toast */}
-      {showApplyToast && (
-        <div className="fixed bottom-4 right-4 bg-emerald-600 text-white px-6 py-4 rounded-xl shadow-lg flex items-center gap-3 animate-slide-up z-50">
-          <CheckCircle className="w-6 h-6" />
-          <div>
-            <p className="font-medium">Application tracked!</p>
-            <p className="text-sm text-emerald-100">
-              Update your status in <Link to="/applications" className="underline">Applications</Link> after applying.
-            </p>
+      {/* Tracker Promo Modal - Interstitial for free users clicking Apply */}
+      {showTrackerPromoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={handleContinueToSite}
+          />
+
+          {/* Modal */}
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-slide-up">
+            {/* Header gradient */}
+            <div className="bg-gradient-to-r from-primary-600 via-accent-500 to-primary-600 p-6 text-white text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm mb-4">
+                <ClipboardList className="w-8 h-8" />
+              </div>
+              <h2 className="text-2xl font-bold mb-2">Track Your Applications!</h2>
+              <p className="text-primary-100 text-sm">
+                Did you know? VANurses can track all your job applications from submission to acceptance.
+              </p>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <div className="space-y-4 mb-6">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                    <CheckCircle className="w-4 h-4 text-primary-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900">Never forget where you applied</p>
+                    <p className="text-sm text-slate-500">Keep a record of every application</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                    <CheckCircle className="w-4 h-4 text-primary-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900">Track application status</p>
+                    <p className="text-sm text-slate-500">From submitted to accepted</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                    <CheckCircle className="w-4 h-4 text-primary-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900">Set reminders for follow-ups</p>
+                    <p className="text-sm text-slate-500">Never miss an important deadline</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* CTA Buttons */}
+              <div className="space-y-3">
+                <Link
+                  to="/billing"
+                  onClick={() => setShowTrackerPromoModal(false)}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium transition-colors"
+                >
+                  <Crown className="w-5 h-5" />
+                  Upgrade - $9/mo
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+
+                <button
+                  onClick={handleContinueToSite}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 font-medium transition-colors"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Continue to Job Site
+                </button>
+
+                <button
+                  onClick={handleDoNotRemind}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 text-slate-400 hover:text-slate-600 text-sm transition-colors"
+                >
+                  <BellOff className="w-4 h-4" />
+                  Don't remind me again
+                </button>
+              </div>
+            </div>
+
+            {/* Close button */}
+            <button
+              onClick={handleContinueToSite}
+              className="absolute top-4 right-4 p-2 text-white/80 hover:text-white hover:bg-white/20 rounded-full transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
+        </div>
+      )}
+
+      {/* Apply Tracking Toast - Different messages for paid vs free users */}
+      {showApplyToast && (
+        <div className={`fixed bottom-4 right-4 ${isPaid || isAdminUnlocked() ? 'bg-emerald-600' : 'bg-gradient-to-r from-primary-600 to-accent-600'} text-white px-6 py-4 rounded-xl shadow-lg animate-slide-up z-50 max-w-sm`}>
+          {(isPaid || isAdminUnlocked()) ? (
+            /* Paid user message */
+            <div className="flex items-center gap-3">
+              <CheckCircle className="w-6 h-6 flex-shrink-0" />
+              <div>
+                <p className="font-medium">Added to your tracker!</p>
+                <p className="text-sm text-emerald-100">
+                  Track your progress in <Link to="/applications" className="underline font-medium">Applications</Link>
+                </p>
+              </div>
+            </div>
+          ) : (
+            /* Free user message - promote tracker */
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Crown className="w-5 h-5 flex-shrink-0" />
+                <p className="font-medium">Track your applications!</p>
+              </div>
+              <p className="text-sm text-primary-100 mb-3">
+                With a paid account, track every application from submission to acceptance. Never forget where you applied!
+              </p>
+              <Link
+                to="/billing"
+                className="inline-flex items-center gap-2 bg-white text-primary-600 px-4 py-2 rounded-lg font-medium text-sm hover:bg-primary-50 transition-colors"
+              >
+                <Sparkles className="w-4 h-4" />
+                Unlock Tracker - $9/mo
+              </Link>
+            </div>
+          )}
         </div>
       )}
 
@@ -1048,6 +1265,23 @@ export default function JobDetail() {
           >
             Upgrade now
           </Link>
+        </div>
+      )}
+
+      {/* Message Someone Here - Coming Soon Toast */}
+      {showMessageComingSoon && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-4 rounded-xl shadow-lg animate-slide-up z-50 max-w-md">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+              <Users className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-semibold">Coming Soon!</p>
+              <p className="text-sm text-indigo-100">
+                Connect with nurses at this facility. We're building this feature now!
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </div>

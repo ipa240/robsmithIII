@@ -6,6 +6,7 @@ import {
   Check, X, Loader2
 } from 'lucide-react'
 import { api } from '../api/client'
+import { SEO } from '../components/SEO'
 
 interface AdminStats {
   users: {
@@ -156,6 +157,11 @@ export default function Admin() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
+      <SEO
+        title="Admin Dashboard"
+        description="VANurses admin dashboard"
+        noindex={true}
+      />
       {/* Header */}
       <div className="flex items-center gap-4">
         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 to-pink-500 flex items-center justify-center">
